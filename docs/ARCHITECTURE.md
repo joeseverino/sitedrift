@@ -70,7 +70,7 @@ cross-origin isolation, and so root-relative links keep working.
 Each side is exposed under a path prefix:
 
 - `devBase` (default `http://127.0.0.1:4321`) → `/__dev/*`
-- `liveBase` (default `https://jseverino.com`) → `/__live/*`
+- `liveBase` (default `https://example.com`) → `/__live/*`
 
 `targetFor(side, pathname, search)` strips the `/__<side>` prefix and rebuilds
 the absolute upstream URL. `cleanBase()` normalizes the configured origins

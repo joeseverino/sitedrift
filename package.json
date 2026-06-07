@@ -1,0 +1,43 @@
+{
+  "name": "sitedrift",
+  "version": "0.1.0",
+  "description": "Catch the drift between dev and live — frame your local site and production side-by-side on the same route, locked scroll, with a difference-blend overlay. Zero dependencies.",
+  "type": "module",
+  "bin": {
+    "sitedrift": "./sitedrift.mjs"
+  },
+  "files": [
+    "sitedrift.mjs",
+    "assets/icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node sitedrift.mjs"
+  },
+  "keywords": [
+    "dev-tool",
+    "visual-diff",
+    "visual-regression",
+    "staging",
+    "production",
+    "side-by-side",
+    "proxy",
+    "seo",
+    "astro",
+    "overlay"
+  ],
+  "author": "Joe Severino (https://github.com/joeseverino)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeseverino/sitedrift.git"
+  },
+  "homepage": "https://github.com/joeseverino/sitedrift#readme",
+  "bugs": {
+    "url": "https://github.com/joeseverino/sitedrift/issues"
+  }
+}
