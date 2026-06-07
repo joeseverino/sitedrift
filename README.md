@@ -97,8 +97,9 @@ when `CF_PAGES=1` and `CF_PAGES_BRANCH` is not `main`. Production builds are
 left unchanged. Use `--production-branch <name>` when production is another
 branch.
 
-Hosted proxies are read-only (`GET`/`HEAD`), sandboxed without same-origin
-authority, and fixed to the configured live origin. Review notes stay in that
+Hosted proxies are read-only (`GET`/`HEAD`) and fixed to the configured live
+origin. Frames run the compared site's scripts so interactive previews behave
+like the deployment; only enable the addon for preview code you trust. Review notes stay in that
 browser's `localStorage`; they are not sent to an API, shared with agents, or
 written to disk. Existing application Functions keep their original routes.
 

@@ -107,6 +107,6 @@ LIVE render on separate origins. Never expose sitedrift through a public proxy.
 
 The optional Cloudflare Pages addon is intentionally public-preview safe: it is
 installed only on non-production builds, exposes only `/__sitedrift/*`, permits
-only `GET` and `HEAD`, allowlists one configured live origin, and sandboxes both
-frames without same-origin authority. Production output and existing API
-Functions are unchanged.
+only `GET` and `HEAD`, and allowlists one configured live origin. Hosted frames
+execute the compared site's scripts and must be used only with trusted preview
+code. Production output and existing API Functions are unchanged.
