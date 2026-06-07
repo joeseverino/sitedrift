@@ -3,6 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './test',
   testMatch: /visual\.spec\.mjs/,
+  snapshotPathTemplate: '{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}',
   fullyParallel: false,
   reporter: 'list',
   use: {

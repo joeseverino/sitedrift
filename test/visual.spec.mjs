@@ -5,7 +5,9 @@ const DESKTOP = { width: 1280, height: 800 };
 const MOBILE = { width: 412, height: 880 };
 const SCREENSHOT = {
   animations: 'disabled',
-  maxDiffPixelRatio: 0.002,
+  // Allow small cross-platform font rasterization differences while still
+  // catching layout, visibility, spacing, and color regressions.
+  maxDiffPixelRatio: 0.01,
 };
 
 async function ready(page) {
