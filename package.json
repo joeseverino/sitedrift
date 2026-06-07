@@ -1,18 +1,22 @@
 {
   "name": "sitedrift",
-  "version": "0.1.0",
-  "description": "Catch the drift between dev and live — frame your local site and production side-by-side on the same route, locked scroll, with a difference-blend overlay. Zero dependencies.",
+  "version": "0.2.0",
+  "description": "Catch the drift between dev and live — frame your local site and production side-by-side on the same route, locked scroll, with a difference-blend overlay. Zero runtime dependencies.",
   "type": "module",
   "bin": {
-    "sitedrift": "sitedrift.mjs"
+    "sitedrift": "sitedrift.mjs",
+    "sitedrift-mcp": "sitedrift-mcp.mjs"
   },
   "files": [
     "sitedrift.mjs",
+    "sitedrift-mcp.mjs",
     "src/",
     "assets/viewer.html",
     "assets/viewer.css",
     "assets/viewer.js",
     "assets/icon.svg",
+    "docs/images/",
+    "AGENTS.md",
     "README.md",
     "LICENSE"
   ],
@@ -21,7 +25,10 @@
   },
   "scripts": {
     "start": "node sitedrift.mjs",
-    "test": "for f in sitedrift.mjs src/*.mjs; do node --check \"$f\" || exit 1; done"
+    "test": "for f in sitedrift.mjs src/*.mjs assets/viewer.js test/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
+    "test:e2e:visual": "VISUAL=1 playwright test",
+    "test:e2e:visual:update": "VISUAL=1 playwright test --update-snapshots",
+    "docs:screenshots": "node test/capture-readme.mjs"
   },
   "publishConfig": {
     "access": "public"
@@ -47,5 +54,9 @@
   "homepage": "https://github.com/joeseverino/sitedrift#readme",
   "bugs": {
     "url": "https://github.com/joeseverino/sitedrift/issues"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "playwright": "^1.60.0"
   }
 }

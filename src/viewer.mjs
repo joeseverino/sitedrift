@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 // Bumped when the viewer assets change; busts the ?v= cache and reported in
 // /health so the `site compare` wrapper knows when to restart the server.
-export const VIEWER_VERSION = 22;
+export const VIEWER_VERSION = 28;
 
 function readAsset(path) {
   try {
@@ -20,13 +20,16 @@ export const assets = {
   icon: readAsset('../assets/icon.svg'),
 };
 
-export function renderViewer({ devBase, liveBase, brand, author, vaultDir }) {
+export function renderViewer({ devBase, liveBase, brand, author, vaultDir }, session) {
   const config = JSON.stringify({
     dev: devBase.href.replace(/\/$/, ''),
     live: liveBase.href.replace(/\/$/, ''),
     brand,
     author,
     vault: !!vaultDir,
+    token: session.token,
+    api: '/api/v1',
+    frameOrigins: session.frameUrls,
   }).replace(/</g, '\\u003c');
 
   return assets.html

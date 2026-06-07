@@ -1,9 +1,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 
 // Short flags and the boolean flags that never consume the next argument.
 const ALIASES = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'version' };
-const BOOLEANS = new Set(['open', 'http', 'help', 'version']);
+const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version']);
+const VALUE_FLAGS = new Set([
+  'dev', 'live', 'port', 'host', 'cert', 'key', 'notes', 'brand', 'author',
+  'vault', 'config', 'route', 'side',
+]);
+const KNOWN_FLAGS = new Set([...BOOLEANS, ...VALUE_FLAGS]);
+const CONFIG_NAMES = ['sitedrift.config.json', '.sitedriftrc.json'];
 
 export function parseArgs(argv) {
   const opts = {};
@@ -17,15 +24,47 @@ export function parseArgs(argv) {
     const eq = arg.indexOf('=');
     if (eq !== -1) { value = arg.slice(eq + 1); arg = arg.slice(0, eq); }
     const name = ALIASES[arg] || arg;
+    if (!KNOWN_FLAGS.has(name)) throw new Error(`Unknown option: --${arg}`);
     if (BOOLEANS.has(name)) { opts[name] = true; continue; }
     if (value === undefined) {
       const next = argv[i + 1];
       if (next !== undefined && next[0] !== '-') { value = next; i++; }
-      else value = true;
+      else throw new Error(`Option --${name} requires a value.`);
     }
     opts[name] = value;
   }
   return { opts, positionals };
+}
+
+function findConfigFile(start = process.cwd()) {
+  let dir = path.resolve(start);
+  while (true) {
+    for (const name of CONFIG_NAMES) {
+      const file = path.join(dir, name);
+      if (fs.existsSync(file)) return file;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+function readConfigFile(explicit) {
+  const file = explicit ? path.resolve(explicit) : findConfigFile();
+  if (!file) return {};
+  let value;
+  try {
+    value = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`Could not read config ${file}: ${error.message}`);
+  }
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error(`Config ${file} must contain a JSON object.`);
+  }
+  const allowed = new Set(['dev', 'live', 'port', 'host', 'cert', 'key', 'notes', 'brand', 'author', 'vault', 'https', 'open']);
+  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
+  if (unknown.length) throw new Error(`Unknown config key${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`);
+  return value;
 }
 
 // SITEDRIFT_<NAME> is the public env var; SITE_COMPARE_<NAME> is the legacy name
@@ -36,8 +75,16 @@ function envVal(name) {
 }
 
 // Precedence for every setting: CLI flag > env > built-in default.
-function pick(opts, flag, name, fallback) {
-  return opts[flag] ?? envVal(name) ?? fallback;
+function pick(opts, fileConfig, flag, name, fallback) {
+  return opts[flag] ?? envVal(name) ?? fileConfig[flag] ?? fallback;
+}
+
+function boolean(value, name) {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined) return false;
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  throw new Error(`${name} must be true/false or 1/0.`);
 }
 
 export function cleanBase(value) {
@@ -60,6 +107,13 @@ export function printHelp() {
 Usage:
   sitedrift [path] [options]
   npx sitedrift /pricing --dev http://localhost:4321 --live https://example.com --open
+  sitedrift status
+  sitedrift context
+  sitedrift mcp
+  sitedrift notes list
+  sitedrift notes add <text> [--route /path] [--side dev|live] [--author name]
+  sitedrift notes resolve|reopen|remove <id>
+  sitedrift notes clear
 
 Options:
   -d, --dev <url>     Left-pane (dev) origin            [default http://127.0.0.1:4321]
@@ -67,13 +121,16 @@ Options:
   -p, --port <n>      Listen port                       [default 4178]
       --host <addr>   Bind address                      [default 127.0.0.1]
   -o, --open          Open the viewer in your browser
-      --http          Force plain HTTP (ignore --cert/--key)
+      --https         Serve HTTPS with an auto cert (mkcert if present, else openssl)
+      --setup-https   One-time: generate + trust a local cert, then exit
+      --http          Force plain HTTP (the default; overrides --https)
       --cert <file>   TLS cert (serve HTTPS; needs --key)
       --key <file>    TLS key
       --notes <file>  Shared review-notes JSON          [default \$TMPDIR/sitedrift-notes.json]
       --brand <text>  Strip "| <text>" from pane-header titles
       --author <name> Byline for notes added in the viewer
       --vault <dir>   Enable "Send to vault" (writes review markdown here)
+      --config <file> Read project configuration from a JSON file
   -h, --help          Show this help
   -v, --version       Print version
 
@@ -84,23 +141,75 @@ publicly. See https://github.com/joeseverino/sitedrift`);
 
 export function resolveConfig(argv = process.argv.slice(2)) {
   const { opts, positionals } = parseArgs(argv);
+  if (positionals.length > 1) throw new Error(`Unexpected argument: ${positionals[1]}`);
+  const fileConfig = readConfigFile(opts.config);
+  const port = Number(pick(opts, fileConfig, 'port', 'PORT', 4178));
+  if (!Number.isInteger(port) || port < 1 || port > 65533) {
+    throw new Error('Port must be an integer from 1 to 65533 (the next two ports isolate DEV and LIVE).');
+  }
+  const certFile = opts.http ? undefined : pick(opts, fileConfig, 'cert', 'CERT', undefined);
+  const keyFile = opts.http ? undefined : pick(opts, fileConfig, 'key', 'KEY', undefined);
+  if (!!certFile !== !!keyFile) throw new Error('--cert and --key must be provided together.');
+  const host = pick(opts, fileConfig, 'host', 'HOST', '127.0.0.1');
+  if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
+    throw new Error('Host must be loopback (127.0.0.1, localhost, or ::1).');
+  }
   return {
     opts,
     help: !!opts.help,
     version: !!opts.version,
-    host: pick(opts, 'host', 'HOST', '127.0.0.1'),
-    port: Number(pick(opts, 'port', 'PORT', 4178)),
-    devBase: cleanBase(pick(opts, 'dev', 'DEV', 'http://127.0.0.1:4321')),
-    liveBase: cleanBase(pick(opts, 'live', 'LIVE', 'https://example.com')),
-    certFile: opts.http ? undefined : pick(opts, 'cert', 'CERT', undefined),
-    keyFile: opts.http ? undefined : pick(opts, 'key', 'KEY', undefined),
-    notesFile: pick(opts, 'notes', 'NOTES', `${os.tmpdir()}/sitedrift-notes.json`),
-    brand: pick(opts, 'brand', 'BRAND', ''),
-    author: pick(opts, 'author', 'AUTHOR', 'you'),
-    vaultDir: pick(opts, 'vault', 'VAULT', ''),
-    open: !!opts.open,
+    setupHttps: !!opts['setup-https'],
+    https: !opts.http && boolean(pick(opts, fileConfig, 'https', 'HTTPS', false), 'https'),
+    host,
+    port,
+    devBase: cleanBase(pick(opts, fileConfig, 'dev', 'DEV', 'http://127.0.0.1:4321')),
+    liveBase: cleanBase(pick(opts, fileConfig, 'live', 'LIVE', 'https://example.com')),
+    certFile,
+    keyFile,
+    notesFile: pick(opts, fileConfig, 'notes', 'NOTES', `${os.tmpdir()}/sitedrift-notes.json`),
+    brand: pick(opts, fileConfig, 'brand', 'BRAND', ''),
+    author: pick(opts, fileConfig, 'author', 'AUTHOR', 'you'),
+    vaultDir: pick(opts, fileConfig, 'vault', 'VAULT', ''),
+    open: boolean(pick(opts, fileConfig, 'open', 'OPEN', false), 'open'),
     initialPath: positionals[0]
       ? '/' + String(positionals[0]).replace(/^\/+/, '')
       : '',
+  };
+}
+
+export function parseCommand(argv = process.argv.slice(2)) {
+  const name = argv[0];
+  if (name !== 'status' && name !== 'context' && name !== 'notes' && name !== 'mcp') return null;
+  if (name === 'mcp') {
+    if (argv.length > 1) throw new Error('Usage: sitedrift mcp');
+    return { command: { name }, argv: [] };
+  }
+  if (name === 'status' || name === 'context') {
+    return { command: { name }, argv: argv.slice(1) };
+  }
+  const action = argv[1];
+  if (!['list', 'add', 'resolve', 'reopen', 'remove', 'clear'].includes(action)) {
+    throw new Error('Usage: sitedrift notes list|add|resolve|reopen|remove|clear');
+  }
+  const tail = argv.slice(2);
+  let subject;
+  if (action === 'add' || ['resolve', 'reopen', 'remove'].includes(action)) {
+    subject = tail.shift();
+    if (!subject) throw new Error(`sitedrift notes ${action} requires ${action === 'add' ? 'text' : 'an id'}.`);
+  }
+  const { opts, positionals } = parseArgs(tail);
+  if (positionals.length) throw new Error(`Unexpected argument: ${positionals[0]}`);
+  if (opts.side && !['dev', 'live'].includes(opts.side)) throw new Error('--side must be dev or live.');
+  return {
+    command: {
+      name,
+      action,
+      text: action === 'add' ? subject : undefined,
+      id: action === 'add' ? undefined : subject,
+      route: opts.route,
+      side: opts.side,
+      author: opts.author,
+    },
+    argv: tail,
   };
 }

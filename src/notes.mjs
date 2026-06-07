@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 // Review notes are a JSON file the server reads/mutates and the viewer polls,
 // making it a shared channel between humans and AI sessions.
@@ -14,11 +15,10 @@ export function createNotes({ notesFile, author }) {
   }
 
   function save(notes) {
-    try {
-      const tmp = `${notesFile}.${process.pid}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(notes, null, 2));
-      fs.renameSync(tmp, notesFile);
-    } catch {}
+    fs.mkdirSync(path.dirname(notesFile), { recursive: true });
+    const tmp = `${notesFile}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(notes, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, notesFile);
   }
 
   function id() {
@@ -43,21 +43,32 @@ export function createNotes({ notesFile, author }) {
     let notes = load();
     if (op.op === 'add' && op.text) {
       const text = String(op.text).slice(0, 2000);
-      const route = op.route || '/';
-      const who = (op.author || author || 'note').slice(0, 24);
+      const rawRoute = String(op.route || '/').slice(0, 2048);
+      const route = rawRoute.startsWith('/') ? rawRoute : `/${rawRoute}`;
+      const who = String(op.author || author || 'note').slice(0, 24);
       const side = op.side === 'dev' || op.side === 'live' ? op.side : null;
       // Skip an identical open note so repeated `--note` seeding doesn't pile up.
       const duplicate = notes.some((note) => !note.done
         && note.text === text && note.route === route && note.author === who && note.side === side);
       if (!duplicate) {
         notes.push({ id: id(), text, author: who, route, side, done: false, ts: Date.now() });
+        if (notes.length > 1000) notes = notes.slice(-1000);
       }
     } else if (op.op === 'remove') {
+      if (!notes.some((note) => note.id === op.id)) throw new Error(`Unknown note id: ${op.id}`);
       notes = notes.filter((note) => note.id !== op.id);
-    } else if (op.op === 'toggle') {
-      notes = notes.map((note) => (note.id === op.id ? { ...note, done: !note.done } : note));
+    } else if (op.op === 'toggle' || op.op === 'resolve' || op.op === 'reopen') {
+      const found = notes.some((note) => note.id === op.id);
+      if (!found) throw new Error(`Unknown note id: ${op.id}`);
+      notes = notes.map((note) => {
+        if (note.id !== op.id) return note;
+        const done = op.op === 'toggle' ? !note.done : op.op === 'resolve';
+        return { ...note, done };
+      });
     } else if (op.op === 'clear') {
       notes = [];
+    } else {
+      throw new Error(`Unknown notes operation: ${op.op || '(missing)'}`);
     }
     save(notes);
     return notes;

@@ -28,7 +28,11 @@ several parts look redundant but are load-bearing.
   | `src/server.mjs` | the request handler + http/https server. |
   | `src/proxy.mjs` | reverse proxy + `rewriteRootPaths` (§3). |
   | `src/notes.mjs` | the notes store — load/save/markdown/ops (§8). |
+  | `src/agent.mjs` | JSON CLI client for the authenticated control API. |
+  | `src/mcp.mjs` | zero-dependency stdio MCP tools, resources, and prompt. |
+  | `src/session.mjs` | private session token + discovery file lifecycle. |
   | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
+  | `src/tls.mjs` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
   | `src/http.mjs` | `send` / `readBody` helpers. |
   | `src/browser.mjs` | cross-platform `--open`. |
   | `assets/viewer.{html,css,js}` | the viewer — edited as real HTML/CSS/JS. |
@@ -38,8 +42,8 @@ several parts look redundant but are load-bearing.
   `author`, `vault`) injected as `window.__SITEDRIFT_CONFIG__`. `viewer.css` and
   `viewer.js` are served as their own cacheable routes; `/` returns only the
   shell (~12 KB instead of ~75 KB inline).
-- **It is a development tool**, not a server. It mutates global response headers
-  (§7) and binds to loopback by default. Never expose it publicly.
+- **It is a loopback development tool**, not a public server. Non-loopback
+  hosts are rejected and Host headers are validated.
 
 The `site` CLI wrapper (process lifecycle, TLS cert wiring, the version/health
 handshake §9) is *not* part of the package surface; the bin is self-launching
@@ -49,7 +53,14 @@ via flags or `SITEDRIFT_*` / legacy `SITE_COMPARE_*` env vars.
 
 ## 2. Process model & request lifecycle
 
-A single `http`/`https` server with one `handler`. TLS is opt-in:
+One process starts three `http`/`https` servers. TLS is opt-in:
+
+- **Control origin** on `--port`: viewer, health, authenticated API.
+- **DEV frame origin** on `--port + 1`: `/__dev/*` only.
+- **LIVE frame origin** on `--port + 2`: `/__live/*` only.
+
+Separate origins prevent proxied scripts from accessing the viewer control
+plane or inspecting the opposite side. All listeners use the same TLS material.
 
 ```
 certFile && keyFile  →  https.createServer({cert, key})
@@ -61,13 +72,14 @@ otherwise            →  http.createServer()
 | Match | Handler |
 |---|---|
 | `/health` | JSON `{ dev, live, version }` — the handshake source (§9). |
-| `/notes` | `GET` returns the list; `POST` (JSON only) applies one op (§8). |
+| `/api/v1/session` | Authenticated machine context and capabilities. |
+| `/api/v1/notes` | Authenticated note list / operation endpoint (§8). |
 | `/notes.md` | Markdown render of the list. |
-| `/notes/save` | `POST` writes the markdown into `SITE_COMPARE_VAULT` (§8.4). |
+| `/api/v1/notes/save` | Authenticated durable export (§8.4). |
 | `/icon.svg` | The startup-loaded SVG, cached 1 day. |
 | `/viewer.css`, `/viewer.js` | The viewer assets, cached 1 day. |
-| `/__dev/*` | `proxy(req, res, 'dev', url)` (§3). |
-| `/__live/*` | `proxy(req, res, 'live', url)` (§3). |
+| frame `/__dev/*` | `proxy(req, res, 'dev', url)` (§3). |
+| frame `/__live/*` | `proxy(req, res, 'live', url)` (§3). |
 | _fallback_ | **Referer-based asset rescue**, else the viewer (§3.3). |
 
 There is no router abstraction by design — the table is short and the ordering
@@ -77,9 +89,9 @@ is the contract.
 
 ## 3. Reverse proxy & URL rewriting
 
-The hardest-to-reason-about subsystem. Goal: render two *different* origins
-inside one same-origin document so they can be framed without tripping
-cross-origin isolation, and so root-relative links keep working.
+The hardest-to-reason-about subsystem. Goal: render two upstream origins under
+isolated frame origins, while keeping those origins separate from the viewer
+control plane and preserving root-relative links.
 
 ### 3.1 Origin mapping
 
@@ -137,26 +149,19 @@ Only with no usable referer does the fallback serve the viewer page.
 
 ---
 
-## 4. The viewer
+## 4. Viewer and frame bridge
 
-`viewerHtml()` returns the entire page as a template literal. Two things to know
-before editing it:
+The viewer receives one escaped JSON config object, copies it into module
+state, and immediately deletes the global. It includes the control API path,
+session token, and isolated frame origins.
 
-- **Config injection.** Server state crosses into the client as a single JSON
-  blob: `const config = ${config}` where `config` is
-  `{ dev, live, brand, author }`, JSON-stringified with `<` escaped to
-  `<` to prevent `</script>` breakout. Anything the client needs from the
-  server goes through this object — keep it small.
-- **Template-literal hazards.** The client JS lives inside a backtick string, so
-  every client-side `\` is `\\`, and a literal `${` in client code is a *server*
-  interpolation. (This already bit the brand-escape regex once — see the
-  `brandStrip` source, which is written to avoid `${` adjacency.) When adding
-  client regexes or `${...}`, mentally render the server pass first.
+The viewer cannot read frame DOM. `proxy.mjs` injects a small bridge into HTML
+responses. It sends bounded metadata, SEO checks, navigation, keyboard, and
+scroll messages to the parent. The parent accepts a message only when both
+`event.origin` and `event.source` match the configured frame and iframe.
 
-The viewer is server-rendered but otherwise a normal DOM app. Validate changes
-with `node --check` **and** by extracting the inline `<script>` and
-`node --check`-ing that separately (the template-literal layer hides syntax
-errors from the module-level check).
+Parent-to-frame messages are limited to settings, scroll positions, and reload.
+No bearer token or filesystem capability crosses into the frame origins.
 
 ---
 
@@ -168,17 +173,14 @@ loops between the two `scroll` event streams.
 
 ### 5.1 Concepts
 
-- **`scrollOwner`** — the side currently driving. Set on any
-  `wheel/touchstart/pointerdown/keydown` in a frame (capture listeners). Only
-  the owner's `scroll` events propagate to the other side; this is what breaks
-  the A-scrolls-B-scrolls-A loop.
+- **`scrollOwner`** — the side currently driving. Frame input messages select
+  the owner; only that side's scroll messages propagate to the other side.
 - **`suppressScrollUntil[side]`** — a short timestamp gate. When we *programmatically*
   set a pane's `scrollTop`, we set this a few ms ahead so the resulting `scroll`
   event is ignored instead of bouncing back. Windows differ by mode (120ms exact,
   up to 600ms ratio) because ratio settling takes longer.
-- **`scroll-behavior: auto !important`** is forced into each frame's
-  document/body (`attachFrameBehavior`) so programmatic jumps are instant — smooth
-  scrolling would desync the panes.
+- The bridge forces `scroll-behavior: auto` before accepting scroll commands so
+  programmatic jumps are instant.
 
 ### 5.2 Two modes (and the overlay override)
 
@@ -192,31 +194,23 @@ loops between the two `scroll` event streams.
 **Overlay forces locking.** Two `let`-free helpers gate the whole subsystem:
 `linked()` = `syncScroll || stacked()` and `effScrollMode()` = `stacked() ?
 'exact' : scrollMode`, where `stacked()` is `viewMode === 'overlay'`. Every
-`syncScroll`/`scrollMode` check in the wheel, keydown, `syncFrom`, and
-`applyScrollPresentation` paths goes through these — so Overlay/Diff always
-pixel-lock and hide scrollbars regardless of the user's toggle (an unlocked
-overlay is illegible). The user's `syncScroll` preference is read, never
-mutated, by entering overlay.
+`syncScroll`/`scrollMode` check in wheel, keydown, `syncFrom`, and frame-setting
+paths goes through these, so Overlay/Diff always pixel-lock regardless of the
+user's toggle. The user's `syncScroll` preference is read, never mutated, by
+entering overlay.
 
 ### 5.3 Input interception
 
-`attachFrameBehavior(side)` (run once per frame document, guarded by a
-`WeakSet`) installs:
-- `wheel` (capture, non-passive) → `preventDefault`, compute target Y via
-  `wheelPixels` (normalizes line/page delta modes), drive both panes.
-- `keydown` → arrows / space / PageUp/Down / Home / End mapped to linked scroll;
-  **and** the global shortcuts (`r/s/0//`) so they work with focus *inside* a
-  pane.
-- `scroll` (passive) → `syncFrom(side)` when this side owns scrolling.
+The injected bridge captures wheel, keyboard, click, and scroll events and
+posts normalized messages. The parent computes linked positions and sends
+explicit scroll commands back.
 
 > **Invariants:**
 > 1. Every programmatic `scrollTop` write must be preceded by setting
 >    `suppressScrollUntil` for the pane being written. Skipping this reintroduces
 >    the feedback loop.
-> 2. `attachFrameBehavior` must remain idempotent (the `attachedDocuments`
->    WeakSet). It's called on every `load`, including reload-free solo swaps.
-> 3. Capture listeners that set `scrollOwner` must stay `passive` — they observe,
->    they don't prevent.
+> 2. Validate both message origin and source before acting.
+> 3. Never expose viewer or control routes on the frame listener.
 
 ---
 
@@ -269,10 +263,10 @@ cross-origin-resource-policy
 - The rest are removed so production (which correctly ships `X-Frame-Options`
   and a strict CSP) can be framed next to dev.
 
-This is the entire security argument for why the tool is loopback-only: it
-deliberately defeats the protections that stop a page being embedded. The
-boundary is "runs on `127.0.0.1`, started by the local user." Do not add a
-mode that binds publicly without re-deriving this.
+The tool deliberately defeats upstream framing protections, so it remains
+loopback-only. The boundary also includes Host validation, a separate frame
+origin, and bearer-authenticated mutations. Do not add public binding without
+re-deriving this.
 
 ---
 
@@ -290,8 +284,9 @@ server-applied op compose without the server holding stale state.
 
 ### 8.2 Op-based mutation, not list replacement
 
-`POST /notes` carries a single op: `add | remove | toggle | clear`
-(`applyNoteOp`). The server reads → mutates → writes → returns the new list.
+`POST /api/v1/notes` carries one op:
+`add | remove | toggle | resolve | reopen | clear`. The server reads, mutates,
+writes atomically, and returns the new list.
 
 > **Why ops, not PUT-the-whole-list:** with two concurrent writers, a full-list
 > PUT races — writer A's stale list overwrites writer B's just-added note.
@@ -305,7 +300,8 @@ also what makes a rendered note **clickable** (`go(note.route)` + focus) and
 
 ### 8.3 Live propagation
 
-The viewer **polls `GET /notes` every 4s**. `applyNotes()` compares a JSON
+The viewer **polls `GET /api/v1/notes` every 4s** with its bearer token.
+`applyNotes()` compares a JSON
 signature against the last applied list and **only re-renders on change** — so
 polling is cheap and doesn't disturb the drawer or a note being composed.
 `notesPost()` applies the server's returned list immediately for snappy local
@@ -314,10 +310,11 @@ feedback; the poll reconciles everyone else's writes.
 > **Footgun:** do not move notes into URL/localStorage "for consistency" with §6.
 > The file *is* the channel; that's the whole feature.
 
-### 8.4 Durable export — `POST /notes/save`
+### 8.4 Durable export — `POST /api/v1/notes/save`
 
 The channel file is ephemeral (`$TMPDIR`). When `SITE_COMPARE_VAULT` is set, the
-server exposes `POST /notes/save`, which writes `notesMarkdown(loadNotes())` to a
+server exposes the authenticated save endpoint, which writes
+`notesMarkdown(loadNotes())` to a
 dated `sitedrift-review-<timestamp>.md` in that dir and returns `{ ok, path }`.
 The viewer only shows the **Send to vault** button when `config.vault` is true.
 This is the loop-closer for a solo operator: review → durable record where
@@ -334,7 +331,16 @@ visible and the toolbar's route box absorbs the lost width) or **float**
 
 ---
 
-## 9. Version/health handshake
+## 9. Session and version handshakes
+
+After both listeners bind successfully, the process writes
+`~/.sitedrift/sessions/<port>.json` with mode `0600`. It contains the control
+URL, token, origins, notes path, PID, and start time. `sitedrift context` and
+`sitedrift notes ...` read this descriptor and call `/api/v1/*`, printing JSON.
+
+`sitedrift mcp` and the `sitedrift-mcp` bin expose the same operations over MCP
+stdio. The implementation writes protocol messages only to stdout, supports
+tools/resources/prompts, and keeps HTTP credentials inside the local process.
 
 `/health` returns `{ dev, live, version }` where `version` is `viewerVersion`
 (a module constant). The `site` CLI computes the *expected* health string from
@@ -399,7 +405,8 @@ Quick reference for "things that look removable but aren't":
 
 - Referer rescue must precede the viewer fallback (§3.3).
 - Every programmatic scroll write sets `suppressScrollUntil` first (§5.3).
-- `attachFrameBehavior` stays idempotent via the WeakSet (§5.3).
+- Frame messages validate both origin and source (§4–5).
+- The frame listener exposes proxy routes only (§2).
 - Notes use op-based POST, never full-list replacement (§8.2).
 - Notes live in the file, not URL/storage (§8.3).
 - `<` is escaped in the injected `config` JSON (§4).

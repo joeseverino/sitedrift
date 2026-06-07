@@ -1,4 +1,5 @@
 const config = window.__SITEDRIFT_CONFIG__;
+    delete window.__SITEDRIFT_CONFIG__;
     const root = document.documentElement;
     const app = document.querySelector('.app');
     const routeInput = document.querySelector('.route');
@@ -15,10 +16,10 @@ const config = window.__SITEDRIFT_CONFIG__;
     const noteInput = document.querySelector('.note-compose textarea');
     const toast = document.querySelector('.toast');
     const params = new URLSearchParams(location.search);
-    const attachedDocuments = new WeakSet();
     const suppressScrollUntil = { dev: 0, live: 0 };
     const scrollFrames = { dev: 0, live: 0 };
     const settleTimers = { dev: [], live: [] };
+    const frameState = { dev: { y: 0, max: 0 }, live: { y: 0, max: 0 } };
     let order = params.get('swap') === '1' ? ['live', 'dev'] : ['dev', 'live'];
     let syncScroll = queryOrStoredBool('scroll', 'site-compare-scroll', false);
     let scrollMode = params.get('scrollMode') || localStorage.getItem('site-compare-scroll-mode') || 'exact';
@@ -26,9 +27,11 @@ const config = window.__SITEDRIFT_CONFIG__;
     let mirrorLinks = queryOrStoredBool('mirror', 'site-compare-mirror', false);
     let mobileMode = (params.get('mode') || localStorage.getItem('site-compare-mode')) === 'mobile';
     let compactMode = queryOrStoredBool('compact', 'site-compare-compact', false);
+    const storedView = localStorage.getItem('site-compare-view');
     let viewMode = params.get('view')
       || (params.get('overlay') === '1' ? 'overlay' : params.get('solo') === '1' ? 'solo' : null)
-      || localStorage.getItem('site-compare-view') || 'split';
+      || storedView
+      || (innerWidth <= 600 ? 'solo' : 'split');
     let overlayBlend = (params.get('overlayBlend') || localStorage.getItem('site-compare-overlay-blend')) === 'difference' ? 'difference' : 'opacity';
     if (viewMode === 'diff') { viewMode = 'overlay'; overlayBlend = 'difference'; } // back-compat
     if (!['split', 'solo', 'overlay'].includes(viewMode)) viewMode = 'split';
@@ -41,6 +44,10 @@ const config = window.__SITEDRIFT_CONFIG__;
     let dockMode = queryOrStoredBool('dock', 'site-compare-dock', true);
     let scrollOwner = null;
     const meta = { dev: null, live: null };
+    const apiHeaders = {
+      authorization: 'Bearer ' + config.token,
+      'content-type': 'application/json',
+    };
 
     function queryOrStoredBool(queryName, storageName, fallback) {
       if (params.has(queryName)) return params.get(queryName) === '1';
@@ -60,8 +67,12 @@ const config = window.__SITEDRIFT_CONFIG__;
     }
 
     function frame(side) { return document.querySelector('iframe[data-side="' + side + '"]'); }
-    function proxied(side, route) { return '/__' + side + normalizeRoute(route); }
+    function proxied(side, route) { return config.frameOrigins[side] + '/__' + side + normalizeRoute(route); }
+    function statusUrl(side, route) { return '/__' + side + normalizeRoute(route); }
     function direct(side, route) { return config[side] + normalizeRoute(route); }
+    function framePost(side, type, data = {}) {
+      frame(side).contentWindow?.postMessage({ source: 'sitedrift-parent', side, type, ...data }, config.frameOrigins[side]);
+    }
 
     function statusBadges(side) {
       return [
@@ -89,7 +100,7 @@ const config = window.__SITEDRIFT_CONFIG__;
     }
 
     function fetchStatus(side, route) {
-      const url = proxied(side, route);
+      const url = statusUrl(side, route);
       const read = (method) => fetch(url, { method, cache: 'no-store', redirect: 'manual' });
       read('HEAD')
         .then((res) => (res.status === 405 || res.status === 501 ? read('GET') : res))
@@ -169,50 +180,19 @@ const config = window.__SITEDRIFT_CONFIG__;
       }
     }
 
-    function seoChecks(doc) {
-      const q = (selector) => doc.querySelector(selector);
-      const title = (doc.title || '').trim();
-      const description = q('meta[name="description"]')?.content?.trim() || '';
-      const h1s = doc.querySelectorAll('h1').length;
-      const imgs = [...doc.querySelectorAll('img')];
-      const noAlt = imgs.filter((img) => img.getAttribute('alt') === null).length;
-      const robots = (q('meta[name="robots"]')?.content || '').toLowerCase();
-      return [
-        { label: 'Title present', ok: !!title },
-        { label: 'Title 30–60 chars', ok: title.length >= 30 && title.length <= 60, note: title.length + '' },
-        { label: 'Meta description', ok: !!description },
-        { label: 'Description 70–160', ok: description.length >= 70 && description.length <= 160, note: description.length + '' },
-        { label: 'Exactly one H1', ok: h1s === 1, note: h1s + ' found' },
-        { label: 'Canonical link', ok: !!q('link[rel="canonical"]') },
-        { label: 'Viewport meta', ok: !!q('meta[name="viewport"]') },
-        { label: 'html lang', ok: !!doc.documentElement.getAttribute('lang') },
-        { label: 'Open Graph title', ok: !!q('meta[property="og:title"]') },
-        { label: 'Open Graph image', ok: !!q('meta[property="og:image"]') },
-        { label: 'Not noindex', ok: !robots.includes('noindex') },
-        { label: 'Favicon', ok: !!q('link[rel~="icon"]') },
-        { label: 'Images have alt', ok: noAlt === 0, note: noAlt ? noAlt + ' missing' : 'all' },
-      ];
-    }
-
-    function renderMetadata(side) {
-      const iframe = frame(side);
-      const doc = iframe.contentDocument;
-      if (!doc) return;
-      const route = iframe.contentWindow.location.pathname.replace(new RegExp('^/__' + side), '') || '/';
+    function renderMetadata(side, payload) {
+      const route = payload.route || '/';
+      const source = payload.meta || {};
       const label = document.querySelector('.label[data-label="' + side + '"]');
       if (!label) return;
-      const title = doc.title.trim();
-      const heading = brandStrip(title)
-        || doc.querySelector('h1')?.textContent?.trim()
-        || 'Untitled page';
-      const description = doc.querySelector('meta[name="description"]')?.content?.trim() || '';
-      const canonical = doc.querySelector('link[rel="canonical"]')?.href || direct(side, route);
-      const siteName = doc.querySelector('meta[property="og:site_name"]')?.content?.trim()
+      const title = (source.title || '').trim();
+      const heading = brandStrip(title) || source.heading || 'Untitled page';
+      const description = source.description || '';
+      const canonical = source.canonical || direct(side, route);
+      const siteName = source.siteName
         || config.brand
         || new URL(direct(side, route)).hostname;
-      const icon = doc.querySelector('link[rel="icon"][type="image/svg+xml"]')
-        || doc.querySelector('link[rel="icon"]');
-      const faviconSrc = icon?.href || ('/__' + side + '/favicon.ico');
+      const faviconSrc = source.icon || (config.frameOrigins[side] + '/__' + side + '/favicon.ico');
       let canonicalPath = canonical;
       try { canonicalPath = new URL(canonical).pathname; } catch {}
       meta[side] = { title, description, canonicalPath, heading };
@@ -237,10 +217,10 @@ const config = window.__SITEDRIFT_CONFIG__;
           escapeHtml(truncate(title || 'Missing page title', 62)) + '</div>' +
         '<div class="seo-description' + (description ? '' : ' seo-empty') + '" data-seo="desc">' +
           escapeHtml(truncate(description || 'Missing meta description', 158)) + '</div>' +
-        seoChecksHtml(doc);
+        seoChecksHtml(source.checks || []);
       const seoFav = label.querySelector('.seo-favicon');
       if (seoFav) seoFav.onerror = () => { seoFav.onerror = null; seoFav.src = '/icon.svg'; };
-      const fails = seoChecks(doc).filter((check) => !check.ok).length;
+      const fails = (source.checks || []).filter((check) => !check.ok).length;
       const flag = label.querySelector('.seo-flag');
       if (flag) {
         flag.hidden = fails === 0;
@@ -250,8 +230,7 @@ const config = window.__SITEDRIFT_CONFIG__;
       renderMetaDiff();
     }
 
-    function seoChecksHtml(doc) {
-      const checks = seoChecks(doc);
+    function seoChecksHtml(checks) {
       const fails = checks.filter((check) => !check.ok).length;
       const head = '<div class="seo-checks-head"><span>SEO checks</span>'
         + (fails
@@ -347,70 +326,44 @@ const config = window.__SITEDRIFT_CONFIG__;
     function linked() { return syncScroll || stacked(); }
     function effScrollMode() { return stacked() ? 'exact' : scrollMode; }
 
-    function scrollRoot(win) {
-      return win.document.scrollingElement || win.document.documentElement;
-    }
-
-    function applyScrollPresentation(doc) {
-      let style = doc.getElementById('site-compare-scroll-style');
-      if (!style) {
-        style = doc.createElement('style');
-        style.id = 'site-compare-scroll-style';
-        doc.head.append(style);
-      }
-      style.textContent = linked()
-        ? 'html,body{scrollbar-width:none!important;-ms-overflow-style:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important}'
-        : '';
+    function applyFrameSettings(side) {
+      framePost(side, 'settings', { linked: linked(), mirror: mirrorLinks });
     }
 
     function setLinkedScroll(sourceSide, requestedY) {
-      const source = frame(sourceSide).contentWindow;
       const otherSide = sourceSide === 'dev' ? 'live' : 'dev';
-      const other = frame(otherSide).contentWindow;
-      if (!source || !other) return;
-      const sourceRoot = scrollRoot(source);
-      const sourceMax = Math.max(0, sourceRoot.scrollHeight - source.innerHeight);
+      const sourceMax = frameState[sourceSide].max;
       const sourceY = Math.max(0, Math.min(sourceMax, requestedY));
       suppressScrollUntil[sourceSide] = Date.now() + 120;
-      sourceRoot.scrollTop = sourceY;
       if (effScrollMode() === 'exact') {
-        const otherRoot = scrollRoot(other);
-        const sharedMax = Math.min(sourceMax, Math.max(0, otherRoot.scrollHeight - other.innerHeight));
+        const sharedMax = Math.min(sourceMax, frameState[otherSide].max);
         const sharedY = Math.min(sharedMax, sourceY);
         suppressScrollUntil[otherSide] = Date.now() + 120;
-        sourceRoot.scrollTop = sharedY;
-        otherRoot.scrollTop = sharedY;
+        frameState[sourceSide].y = sharedY;
+        frameState[otherSide].y = sharedY;
+        framePost(sourceSide, 'scroll', { y: sharedY });
+        framePost(otherSide, 'scroll', { y: sharedY });
       } else {
+        frameState[sourceSide].y = sourceY;
+        framePost(sourceSide, 'scroll', { y: sourceY });
         alignSide(sourceSide, otherSide);
       }
     }
 
-    function wheelPixels(event, win) {
-      if (event.deltaMode === 1) return event.deltaY * 18;
-      if (event.deltaMode === 2) return event.deltaY * win.innerHeight;
-      return event.deltaY;
-    }
-
     function alignSide(sourceSide, targetSide) {
-      const source = frame(sourceSide).contentWindow;
-      const target = frame(targetSide).contentWindow;
-      if (!source || !target) return;
-      let targetY = source.scrollY;
+      let targetY = frameState[sourceSide].y;
       if (effScrollMode() === 'ratio') {
-        const sourceRoot = scrollRoot(source);
-        const sourceMax = Math.max(0, sourceRoot.scrollHeight - source.innerHeight);
-        const ratio = sourceMax ? source.scrollY / sourceMax : 0;
-        const targetRoot = scrollRoot(target);
-        const targetMax = Math.max(0, targetRoot.scrollHeight - target.innerHeight);
-        targetY = ratio * targetMax;
+        const sourceMax = frameState[sourceSide].max;
+        const ratio = sourceMax ? frameState[sourceSide].y / sourceMax : 0;
+        targetY = ratio * frameState[targetSide].max;
       }
       suppressScrollUntil[targetSide] = Date.now() + (effScrollMode() === 'exact' ? 120 : 600);
-      scrollRoot(target).scrollTop = targetY;
+      frameState[targetSide].y = targetY;
+      framePost(targetSide, 'scroll', { y: targetY });
     }
 
     function syncFrom(side, force = false) {
-      const win = frame(side).contentWindow;
-      if (!win || !linked() || Date.now() < suppressScrollUntil[side]) return;
+      if (!linked() || Date.now() < suppressScrollUntil[side]) return;
       if (!scrollOwner) scrollOwner = side;
       if (!force && scrollOwner !== side) return;
       if (effScrollMode() === 'exact') {
@@ -432,104 +385,68 @@ const config = window.__SITEDRIFT_CONFIG__;
       scrollOwner = side;
     }
 
-    function routeFromFrameUrl(side, href) {
-      const url = new URL(href);
-      const prefix = '/__' + side;
-      const pathname = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length) || '/' : url.pathname;
-      return pathname + url.search + url.hash;
-    }
-
-    function attachFrameBehavior(side) {
-      const iframe = frame(side);
-      const win = iframe.contentWindow;
-      const doc = iframe.contentDocument;
-      if (!win || !doc || attachedDocuments.has(doc)) return;
-      attachedDocuments.add(doc);
-      doc.documentElement.style.setProperty('scroll-behavior', 'auto', 'important');
-      doc.body?.style.setProperty('scroll-behavior', 'auto', 'important');
-      applyScrollPresentation(doc);
-      doc.addEventListener('wheel', (event) => {
-        if (!linked() || event.deltaY === 0) return;
-        event.preventDefault();
-        markScrollOwner(side);
-        setLinkedScroll(side, win.scrollY + wheelPixels(event, win));
-      }, { passive: false, capture: true });
-      doc.addEventListener('keydown', (event) => {
-        const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)
-          || event.target.isContentEditable;
-        if (!typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
-          const key = event.key.toLowerCase();
-          if (key === 'r' || key === 's' || key === '0' || key === '/' || key === 'o' || key === 'd') {
-            event.preventDefault();
-            if (key === 'r') document.querySelector('[data-action="reload"]').click();
-            if (key === 's') document.querySelector('[data-action="swap"]').click();
-            if (key === 'o') setMode(viewMode === 'overlay' ? 'split' : 'overlay');
-            if (key === 'd') {
-              if (viewMode === 'overlay' && overlayBlend === 'difference') setMode('split');
-              else { setMode('overlay'); setOverlayBlend('difference'); }
-            }
-            if (key === '0') setSplit(50);
-            if (key === '/') {
-              routeInput.focus();
-              routeInput.select();
-            }
-            return;
-          }
-        }
-        if (!linked() || event.metaKey || event.ctrlKey || event.altKey
-          || typing) return;
-        let next = null;
-        if (event.key === 'ArrowDown') next = win.scrollY + 44;
-        if (event.key === 'ArrowUp') next = win.scrollY - 44;
-        if (event.key === 'PageDown' || (event.key === ' ' && !event.shiftKey)) next = win.scrollY + win.innerHeight * .85;
-        if (event.key === 'PageUp' || (event.key === ' ' && event.shiftKey)) next = win.scrollY - win.innerHeight * .85;
-        if (event.key === 'Home') next = 0;
-        if (event.key === 'End') next = scrollRoot(win).scrollHeight;
-        if (next === null) return;
-        event.preventDefault();
-        markScrollOwner(side);
-        setLinkedScroll(side, next);
-      }, true);
-      win.addEventListener('scroll', () => syncFrom(side), { passive: true });
-      for (const eventName of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
-        doc.addEventListener(eventName, () => markScrollOwner(side), { passive: true, capture: true });
-      }
-      doc.addEventListener('click', (event) => {
-        if (!mirrorLinks || event.defaultPrevented || event.button !== 0
-          || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        const link = event.target.closest('a[href]');
-        if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
-        const url = new URL(link.href, win.location.href);
-        if (url.origin !== location.origin || !url.pathname.startsWith('/__' + side)) return;
-        event.preventDefault();
-        go(routeFromFrameUrl(side, url.href));
-      }, true);
-      // Clicking into a pane counts as "clicking out" of the chrome popovers.
-      doc.addEventListener('pointerdown', () => {
-        for (const open of document.querySelectorAll('details.settings[open], details.help[open]')) open.removeAttribute('open');
-        if (googleOpen()) setGoogleOpen(false);
-        if (notesOpen && !dockMode) setNotesOpen(false);
-      }, { passive: true, capture: true });
-    }
-
     for (const side of ['dev', 'live']) {
       frame(side).addEventListener('load', () => {
-        try {
-          attachFrameBehavior(side);
-          renderMetadata(side);
-          fetchStatus(side, routeFromFrameUrl(side, frame(side).contentWindow.location.href));
-        } catch {}
+        applyFrameSettings(side);
       });
     }
+
+    function runFrameKey(key, side, message) {
+      const lower = String(key).toLowerCase();
+      if (lower === 'r') document.querySelector('[data-action="reload"]').click();
+      else if (lower === 's') document.querySelector('[data-action="swap"]').click();
+      else if (lower === 'o') setMode(viewMode === 'overlay' ? 'split' : 'overlay');
+      else if (lower === 'd') {
+        if (viewMode === 'overlay' && overlayBlend === 'difference') setMode('split');
+        else { setMode('overlay'); setOverlayBlend('difference'); }
+      } else if (lower === '0') setSplit(50);
+      else if (key === '/') { routeInput.focus(); routeInput.select(); }
+      else if (linked()) {
+        let next = null;
+        if (key === 'ArrowDown') next = message.y + 44;
+        if (key === 'ArrowUp') next = message.y - 44;
+        if (key === 'PageDown' || (key === ' ' && !message.shift)) next = message.y + message.height * .85;
+        if (key === 'PageUp' || (key === ' ' && message.shift)) next = message.y - message.height * .85;
+        if (key === 'Home') next = 0;
+        if (key === 'End') next = message.max;
+        if (next !== null) {
+          markScrollOwner(side);
+          setLinkedScroll(side, next);
+        }
+      }
+    }
+
+    addEventListener('message', (event) => {
+      const message = event.data || {};
+      const side = message.side;
+      if (!['dev', 'live'].includes(side)
+        || event.origin !== config.frameOrigins[side]
+        || message.source !== 'sitedrift-frame'
+        || event.source !== frame(side).contentWindow) return;
+      if (message.type === 'ready') {
+        renderMetadata(side, message);
+        fetchStatus(side, message.route || '/');
+        applyFrameSettings(side);
+      } else if (message.type === 'scroll') {
+        frameState[side] = { y: Number(message.y) || 0, max: Number(message.max) || 0 };
+        syncFrom(side);
+      } else if (message.type === 'wheel') {
+        const delta = message.mode === 1 ? message.delta * 18
+          : message.mode === 2 ? message.delta * message.height : message.delta;
+        markScrollOwner(side);
+        setLinkedScroll(side, frameState[side].y + delta);
+      } else if (message.type === 'navigate') {
+        go(message.route);
+      } else if (message.type === 'key') {
+        runFrameKey(message.key, side, message);
+      }
+    });
 
     scrollButton.addEventListener('click', () => {
       syncScroll = !syncScroll;
       scrollButton.classList.toggle('active', syncScroll);
       saveBool('scroll', 'site-compare-scroll', syncScroll);
-      for (const side of ['dev', 'live']) {
-        const doc = frame(side).contentDocument;
-        if (doc) applyScrollPresentation(doc);
-      }
+      for (const side of ['dev', 'live']) applyFrameSettings(side);
       renderSettings();
       if (syncScroll) syncFrom(focusSide, true);
     });
@@ -555,15 +472,13 @@ const config = window.__SITEDRIFT_CONFIG__;
       localStorage.setItem('site-compare-scroll-mode', scrollMode);
       setUrlParam('scrollMode', scrollMode);
       renderScrollMode();
-      for (const side of ['dev', 'live']) {
-        const doc = frame(side).contentDocument;
-        if (doc) applyScrollPresentation(doc);
-      }
+      for (const side of ['dev', 'live']) applyFrameSettings(side);
       if (syncScroll) syncFrom(focusSide, true);
     });
     mirrorButton.addEventListener('click', () => {
       mirrorLinks = !mirrorLinks;
       saveBool('mirror', 'site-compare-mirror', mirrorLinks);
+      for (const side of ['dev', 'live']) applyFrameSettings(side);
       renderSettings();
     });
     mobileButton.addEventListener('click', () => {
@@ -606,10 +521,7 @@ const config = window.__SITEDRIFT_CONFIG__;
       renderModes();
       applyOrder();
       // Overlay forces scroll-lock, so refresh scrollbar hiding + re-align.
-      for (const side of ['dev', 'live']) {
-        const doc = frame(side).contentDocument;
-        if (doc) applyScrollPresentation(doc);
-      }
+      for (const side of ['dev', 'live']) applyFrameSettings(side);
       if (stacked()) alignSide(order[1], order[0]);
     }
     function setOverlayBlend(blend) {
@@ -650,7 +562,7 @@ const config = window.__SITEDRIFT_CONFIG__;
 
     async function notesPull() {
       try {
-        const res = await fetch('/notes', { cache: 'no-store' });
+        const res = await fetch(config.api + '/notes', { cache: 'no-store', headers: apiHeaders });
         const data = await res.json();
         applyNotes(data.notes);
       } catch {}
@@ -658,9 +570,9 @@ const config = window.__SITEDRIFT_CONFIG__;
 
     async function notesPost(op) {
       try {
-        const res = await fetch('/notes', {
+        const res = await fetch(config.api + '/notes', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: apiHeaders,
           body: JSON.stringify(op),
         });
         const data = await res.json();
@@ -835,7 +747,7 @@ const config = window.__SITEDRIFT_CONFIG__;
     if (config.vault) vaultButton.hidden = false;
     vaultButton.addEventListener('click', async () => {
       try {
-        const res = await fetch('/notes/save', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+        const res = await fetch(config.api + '/notes/save', { method: 'POST', headers: apiHeaders, body: '{}' });
         const data = await res.json();
         showToast(data.ok ? 'Saved to vault' : (data.error || 'Vault save failed'));
       } catch {
@@ -867,7 +779,7 @@ const config = window.__SITEDRIFT_CONFIG__;
     document.querySelector('[data-action="go"]').addEventListener('click', () => go());
     for (const button of document.querySelectorAll('[data-action="reload"]')) {
       button.addEventListener('click', () => {
-        for (const side of ['dev', 'live']) frame(side).contentWindow.location.reload();
+        for (const side of ['dev', 'live']) framePost(side, 'reload');
       });
     }
     document.querySelector('[data-action="swap"]').addEventListener('click', () => {
