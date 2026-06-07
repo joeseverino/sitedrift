@@ -37,6 +37,8 @@ test.describe('visual regression', () => {
     await expect(page.locator('.app')).toHaveAttribute('data-focus', 'live');
     await page.getByRole('button', { name: 'Swap sides', exact: true }).click();
     await expect(page).toHaveScreenshot('solo-mobile.png', SCREENSHOT);
+    await page.getByRole('button', { name: 'Collapse review chrome' }).click();
+    await expect(page).toHaveScreenshot('solo-mobile-compact.png', SCREENSHOT);
   });
 
   test('difference overlay', async ({ page }) => {

@@ -64,6 +64,7 @@ button, summary, .label, .compactbar, .divider, .mark, .pill, .icon-control {
   -webkit-tap-highlight-color: transparent;
 }
 button, summary, .open-side { -webkit-touch-callout: none; }
+button, summary, .icon-control { touch-action: manipulation; }
 
 button:focus, summary:focus { outline: none; }
 button:focus-visible, summary:focus-visible {
@@ -872,23 +873,107 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
 }
 
 @media (width <= 600px) {
-  .app, .toolbar { min-inline-size: 0; }
-  .toolbar { gap: 6px; }
-  .toolbar .mark { margin-right: 0; }
-  .toolbar .route { inline-size: 0; flex: 1 1 auto; }
+  :root { --ctl: 44px; }
+
+  .app {
+    min-inline-size: 0;
+    grid-template-rows: 98px 46px minmax(0, 1fr);
+  }
+  .app.compact {
+    grid-template-rows: 50px minmax(0, 1fr);
+  }
+
+  .toolbar {
+    min-inline-size: 0;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px 44px;
+    grid-template-rows: 44px 44px;
+    grid-template-areas:
+      "caret route route go"
+      "modes modes swap notes";
+    gap: 0 6px;
+    padding: 5px 8px;
+  }
+  .toolbar > .caret {
+    display: block;
+    grid-area: caret;
+  }
+  .toolbar > .route {
+    grid-area: route;
+    inline-size: 100%;
+    min-inline-size: 0;
+  }
+  .toolbar > [data-action="go"] {
+    display: block;
+    grid-area: go;
+  }
+  .toolbar > .modes {
+    grid-area: modes;
+    justify-self: center;
+  }
+  .toolbar > [data-action="notes"] {
+    display: block;
+    grid-area: notes;
+  }
+  .toolbar > [data-action="swap"] {
+    display: block;
+    grid-area: swap;
+  }
   .toolbar-spacer,
-  .toolbar > .caret,
-  .toolbar > [data-action="go"],
+  .toolbar > .mark,
   .toolbar > .overlay-slider,
   .toolbar > [data-action="reload"],
   .toolbar > [data-action="scroll"],
-  .toolbar > [data-action="notes"],
   .toolbar > details { display: none; }
-  .toolbar > .modes button { padding-inline: 8px; }
+
+  .caret {
+    inline-size: 44px;
+    block-size: 44px;
+  }
+  .toolbar > .modes button { padding-inline: 14px; }
+
+  .app.compact .compactbar,
+  .app.compact.solo .compactbar {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-areas: "caret controls notes";
+    gap: 6px;
+    padding: 3px 8px;
+  }
+  .compactbar > .caret { grid-area: caret; }
+  .compactbar > .compact-side { display: none; }
+  .compactbar > .compact-controls {
+    grid-area: controls;
+    min-inline-size: 0;
+    gap: 6px;
+    justify-self: center;
+  }
+  .compactbar > [data-action="notes"] { grid-area: notes; }
+  .compactbar .modes button {
+    block-size: 42px;
+    padding-inline: 8px;
+  }
+  .compactbar .overlay-slider { display: none; }
+  .compactbar button.icon {
+    inline-size: 44px;
+    block-size: 44px;
+  }
+
   .label { gap: 6px; padding-inline: 8px; }
   .identity { grid-template-columns: auto minmax(0, 1fr); gap: 6px; }
   .identity .favicon { display: none; }
   .label-actions > :not(.status-badge) { display: none; }
+  .label .status-badge.show {
+    min-inline-size: 44px;
+    block-size: 40px;
+    justify-content: center;
+  }
+  [data-action="notes-dock"] { display: none; }
+}
+
+@media (width <= 360px) {
+  .toolbar > .modes button { padding-inline: 10px; }
+  .compactbar .modes button { padding-inline: 6px; }
+  .compactbar > .compact-controls > [data-action="reload"] { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

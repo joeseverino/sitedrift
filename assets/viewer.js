@@ -88,14 +88,19 @@
         ? location.origin + proxyPath(side) + normalizeRoute(route)
         : config[side] + normalizeRoute(route);
     }
+    const neutralSiteIcon = 'data:image/svg+xml,'
+      + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+        + '<circle cx="12" cy="12" r="10" fill="#64748b"/>'
+        + '<path d="M2.8 12h18.4M12 2.8c3 3 3 15.4 0 18.4M12 2.8c-3 3-3 15.4 0 18.4" '
+        + 'fill="none" stroke="white" stroke-width="1.5" stroke-linecap="round"/>'
+        + '</svg>');
     function setFavicon(image, side, declared = '') {
       const base = config.frameOrigins[side] + proxyPath(side);
-      const appIcon = config.hosted ? '/__sitedrift/assets/icon.svg' : '/icon.svg';
       const candidates = [...new Set([
         declared,
         `${base}/favicon.svg`,
         `${base}/favicon.ico`,
-        appIcon,
+        neutralSiteIcon,
       ].filter(Boolean))];
       let index = 0;
       image.onerror = () => {
@@ -663,6 +668,7 @@
     function closePopovers() {
       for (const details of document.querySelectorAll('details[open]')) details.removeAttribute('open');
       hideStatusPopover();
+      if (notesOpen && !notesDocked()) setNotesOpen(false);
     }
     scrollButton.addEventListener('click', () => {
       syncScroll = !syncScroll;
@@ -923,9 +929,12 @@
     }
 
     const dockButton = document.querySelector('[data-action="notes-dock"]');
+    function notesDocked() {
+      return dockMode && innerWidth > 600;
+    }
     function applyDock() {
       // Dock pushes the panes aside; float overlays them.
-      app.classList.toggle('drawer-dock', notesOpen && dockMode);
+      app.classList.toggle('drawer-dock', notesOpen && notesDocked());
       dockButton.classList.toggle('active', dockMode);
       dockButton.setAttribute('aria-pressed', dockMode ? 'true' : 'false');
     }
@@ -1061,21 +1070,23 @@
         for (const side of ['dev', 'live']) framePost(side, 'reload');
       });
     }
-    document.querySelector('[data-action="swap"]').addEventListener('click', () => {
-      if (viewMode === 'solo') {
-        const nextSide = focusSide === 'dev' ? 'live' : 'dev';
-        if (syncScroll) alignSide(focusSide, nextSide);
-        focusSide = nextSide;
-        app.dataset.focus = focusSide;
-        setUrlParam('focus', focusSide);
-        renderSettings();
-      } else {
-        order.reverse();
-        applyOrder();
-        updateDocTitle();
-        setUrlParam('swap', order[0] === 'live' ? '1' : '0');
-      }
-    });
+    for (const button of document.querySelectorAll('[data-action="swap"]')) {
+      button.addEventListener('click', () => {
+        if (viewMode === 'solo') {
+          const nextSide = focusSide === 'dev' ? 'live' : 'dev';
+          if (syncScroll) alignSide(focusSide, nextSide);
+          focusSide = nextSide;
+          app.dataset.focus = focusSide;
+          setUrlParam('focus', focusSide);
+          renderSettings();
+        } else {
+          order.reverse();
+          applyOrder();
+          updateDocTitle();
+          setUrlParam('swap', order[0] === 'live' ? '1' : '0');
+        }
+      });
+    }
     // Opening one Google preview opens both, anchored under their buttons.
     for (const summary of document.querySelectorAll('.label details > summary')) {
       summary.addEventListener('click', (event) => {
@@ -1091,7 +1102,7 @@
       if (!statusPopover.hidden && !event.target.closest('.status-popover') && !event.target.closest('.status-badge')) {
         hideStatusPopover();
       }
-      if (notesOpen && !dockMode && !event.target.closest('.review-drawer') && !event.target.closest('[data-action="notes"]')) {
+      if (notesOpen && !notesDocked() && !event.target.closest('.review-drawer') && !event.target.closest('[data-action="notes"]')) {
         setNotesOpen(false);
       }
     });
@@ -1104,6 +1115,7 @@
     });
     addEventListener('resize', () => {
       hideStatusPopover();
+      applyDock();
       for (const details of document.querySelectorAll('.label details[open]')) positionSeoCard(details);
     });
     routeInput.addEventListener('keydown', (event) => {

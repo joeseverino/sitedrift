@@ -33,7 +33,7 @@ if (command?.name === 'mcp') {
 } else {
   try {
     const parsed = parseCommand();
-    config = resolveConfig(parsed?.argv ?? process.argv.slice(2));
+    config = resolveConfig(parsed?.argv ?? process.argv.slice(2), { requireLive: !command });
   } catch (error) {
     console.error(`sitedrift: ${error.message}`);
     process.exit(2);

@@ -118,7 +118,7 @@ Usage:
 
 Options:
   -d, --dev <url>     Left-pane (dev) origin            [default http://127.0.0.1:4321]
-  -l, --live <url>    Right-pane (live) origin          [default https://example.com]
+  -l, --live <url>    Right-pane (live) origin          [required]
   -p, --port <n>      Listen port                       [default 4178]
       --host <addr>   Bind address                      [default 127.0.0.1]
       --hostname <n>  Browser hostname                  [default bind address]
@@ -141,7 +141,7 @@ Every option also reads SITEDRIFT_<NAME> (e.g. SITEDRIFT_DEV). Binds to
 publicly. See https://github.com/joeseverino/sitedrift`);
 }
 
-export function resolveConfig(argv = process.argv.slice(2)) {
+export function resolveConfig(argv = process.argv.slice(2), { requireLive = true } = {}) {
   const { opts, positionals } = parseArgs(argv);
   if (positionals.length > 1) throw new Error(`Unexpected argument: ${positionals[1]}`);
   const fileConfig = readConfigFile(opts.config);
@@ -160,6 +160,13 @@ export function resolveConfig(argv = process.argv.slice(2)) {
   if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|::1)$/i.test(hostname)) {
     throw new Error('Hostname must be a valid DNS name or ::1.');
   }
+  const live = pick(opts, fileConfig, 'live', 'LIVE', undefined);
+  if (requireLive && !opts.help && !opts.version && !opts['setup-https'] && !live) {
+    throw new Error(
+      'Missing production URL. Pass --live https://your-site.example '
+      + 'or add "live" to sitedrift.config.json.',
+    );
+  }
   return {
     opts,
     help: !!opts.help,
@@ -170,7 +177,7 @@ export function resolveConfig(argv = process.argv.slice(2)) {
     hostname,
     port,
     devBase: cleanBase(pick(opts, fileConfig, 'dev', 'DEV', 'http://127.0.0.1:4321')),
-    liveBase: cleanBase(pick(opts, fileConfig, 'live', 'LIVE', 'https://example.com')),
+    liveBase: live ? cleanBase(live) : undefined,
     certFile,
     keyFile,
     notesFile: pick(opts, fileConfig, 'notes', 'NOTES', `${os.tmpdir()}/sitedrift-notes.json`),

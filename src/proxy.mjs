@@ -68,10 +68,13 @@ export function createProxy({ devBase, liveBase }) {
       res.writeHead(upstream.status, responseHeaders);
       res.end(Buffer.from(await upstream.arrayBuffer()));
     } catch (error) {
+      const nextStep = side === 'dev'
+        ? 'Start your development server (usually: npm run dev), then reload.'
+        : 'Verify the --live URL is reachable, then reload.';
       send(
         res,
         502,
-        `Could not load ${target.href}\n\n${error.message}\n\nStart the dev server with: site dev`,
+        `Could not load ${target.href}\n\n${error.message}\n\n${nextStep}`,
       );
     }
   }

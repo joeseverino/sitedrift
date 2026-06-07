@@ -6,16 +6,29 @@ import test from 'node:test';
 
 import { parseCommand, resolveConfig } from '../src/cli.mjs';
 
+const viewerScript = fs.readFileSync(new URL('../assets/viewer.js', import.meta.url), 'utf8');
+const viewerHtml = fs.readFileSync(new URL('../assets/viewer.html', import.meta.url), 'utf8');
+
 test('rejects unknown options and invalid ports', () => {
-  assert.throws(() => resolveConfig(['--wat']), /Unknown option/);
-  assert.throws(() => resolveConfig(['--port', 'nope']), /Port must be an integer/);
-  assert.throws(() => resolveConfig(['--port', '65534']), /next two ports/);
-  assert.throws(() => resolveConfig(['--host', 'compare.homelab']), /Host must be loopback/);
-  assert.throws(() => resolveConfig(['--hostname', 'bad host']), /Hostname must be a valid/);
+  const live = ['--live', 'https://example.test'];
+  assert.throws(() => resolveConfig(['--wat', ...live]), /Unknown option/);
+  assert.throws(() => resolveConfig(['--port', 'nope', ...live]), /Port must be an integer/);
+  assert.throws(() => resolveConfig(['--port', '65534', ...live]), /next two ports/);
+  assert.throws(() => resolveConfig(['--host', 'compare.homelab', ...live]), /Host must be loopback/);
+  assert.throws(() => resolveConfig(['--hostname', 'bad host', ...live]), /Hostname must be a valid/);
 });
 
 test('requires certificate and key together', () => {
-  assert.throws(() => resolveConfig(['--cert', '/tmp/cert.pem']), /provided together/);
+  assert.throws(() => resolveConfig([
+    '--cert', '/tmp/cert.pem',
+    '--live', 'https://example.test',
+  ]), /provided together/);
+});
+
+test('requires an explicit production URL', () => {
+  assert.throws(() => resolveConfig([]), /Missing production URL/);
+  assert.doesNotThrow(() => resolveConfig(['--help']));
+  assert.doesNotThrow(() => resolveConfig([], { requireLive: false }));
 });
 
 test('separates the loopback bind address from a local browser hostname', () => {
@@ -24,6 +37,7 @@ test('separates the loopback bind address from a local browser hostname', () => 
     '--hostname', 'compare.homelab',
     '--cert', '/tmp/fullchain.pem',
     '--key', '/tmp/compare.homelab.key',
+    '--live', 'https://example.test',
   ]);
   assert.equal(config.host, '127.0.0.1');
   assert.equal(config.hostname, 'compare.homelab');
@@ -74,4 +88,11 @@ test('parses the Cloudflare preview command', () => {
     brand: '',
     productionBranch: 'trunk',
   });
+});
+
+test('viewer uses neutral pane identity and current help copy', () => {
+  assert.match(viewerScript, /neutralSiteIcon/);
+  assert.doesNotMatch(viewerScript, /const appIcon/);
+  assert.match(viewerHtml, /hosted preview against production/);
+  assert.doesNotMatch(viewerHtml, /Local dev and production, locked/);
 });

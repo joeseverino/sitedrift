@@ -103,7 +103,7 @@ control plane and preserving root-relative links.
 Each side is exposed under a path prefix:
 
 - `devBase` (default `http://127.0.0.1:4321`) → `/__dev/*`
-- `liveBase` (default `https://example.com`) → `/__live/*`
+- `liveBase` (required from CLI, environment, or project config) → `/__live/*`
 
 `targetFor(side, pathname, search)` strips the `/__<side>` prefix and rebuilds
 the absolute upstream URL. `cleanBase()` normalizes the configured origins

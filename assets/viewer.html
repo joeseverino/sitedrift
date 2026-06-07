@@ -58,7 +58,7 @@
         </summary>
         <div class="help-card">
           <strong>sitedrift</strong>
-          <p class="help-blurb">Local dev and production, locked to the same route and scroll. Compare side&#8209;by&#8209;side, drag the divider, or <b>Overlay</b> the panes — flip overlay to <b>Diff</b> and only the pixels that changed light up.</p>
+          <p class="help-blurb">Review local development or a hosted preview against production. Keep routes and scrolling aligned, isolate visual drift with <b>Diff</b>, compare SEO and response details, and leave review notes for people or AI tools.</p>
           <dl class="shortcut-list">
             <dt><kbd>O</kbd></dt><dd>Overlay on/off (restores your layout)</dd>
             <dt><kbd>D</kbd></dt><dd>Difference blend (while overlaid)</dd>
@@ -118,6 +118,9 @@
         </div>
         <button class="icon" data-action="reload" title="Reload both panes" aria-label="Reload both panes">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.5V3m0 0H12m3.5 0-2.2 2.2A6 6 0 1 0 15.8 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="icon" data-action="swap" title="Swap sides" aria-label="Swap sides">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h12m-3-3 3 3-3 3M17 14H5m3 3-3-3 3-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
       </div>
       <div class="compact-side" data-compact-side="live"><span class="pill live">LIVE</span><img class="compact-favicon" data-compact-favicon="live" alt=""><span class="compact-copy"><span class="compact-title" data-compact-title="live">Loading…</span><span class="compact-origin" data-compact-origin="live"></span></span><button type="button" class="status-badge" data-status data-side="live"></button></div>

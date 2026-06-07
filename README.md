@@ -228,7 +228,7 @@ Every option is a CLI flag, and also reads a `SITEDRIFT_<NAME>` env var.
 | Flag | Env | Default | Purpose |
 |---|---|---|---|
 | `-d, --dev <url>` | `SITEDRIFT_DEV` | `http://127.0.0.1:4321` | Left-pane (dev) origin. |
-| `-l, --live <url>` | `SITEDRIFT_LIVE` | `https://example.com` | Right-pane (live) origin. |
+| `-l, --live <url>` | `SITEDRIFT_LIVE` | required | Right-pane (live) origin. |
 | `-p, --port <n>` | `SITEDRIFT_PORT` | `4178` | Listen port. |
 | `--host <addr>` | `SITEDRIFT_HOST` | `127.0.0.1` | Bind address. |
 | `--hostname <name>` | `SITEDRIFT_HOSTNAME` | bind address | Browser-facing local DNS name; the socket remains bound to `--host`. |
