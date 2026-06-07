@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>sitedrift</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/viewer.css?v=__VERSION__">
+</head>
+<body>
+  <main class="app">
+    <header class="toolbar">
+      <button class="caret" data-action="compact" title="Collapse review chrome" aria-label="Collapse review chrome">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 10 5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="mark"><img class="mark-icon" src="/icon.svg" alt="" width="20" height="20"><strong>sitedrift</strong></div>
+      <input class="route" aria-label="Route" value="/" spellcheck="false">
+      <button class="icon" data-action="go" title="Load route (Enter)" aria-label="Load route">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="toolbar-spacer"></span>
+      <div class="modes" role="group" aria-label="View mode">
+        <button data-mode="split" title="Side by side">Split</button>
+        <button data-mode="solo" title="One pane (S swaps)">Solo</button>
+        <button data-mode="overlay" title="Overlay the panes (O)">Overlay</button>
+      </div>
+      <div class="overlay-slider">
+        <input type="range" min="0" max="100" value="50" aria-label="Overlay opacity">
+        <button class="overlay-blend" data-action="overlay-blend" title="Difference blend (D) — changed pixels light up" aria-pressed="false">Diff</button>
+      </div>
+      <button class="icon" data-action="reload" title="Reload both panes (R)" aria-label="Reload both panes">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.5V3m0 0H12m3.5 0-2.2 2.2A6 6 0 1 0 15.8 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="icon" data-action="scroll" title="Toggle locked scrolling" aria-label="Toggle locked scrolling">
+        <span class="sr-only" data-scroll-label>Locked scroll</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7 5.5 10 2l3 3.5M10 2v16m-3-3.5L10 18l3-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="icon" data-action="swap" title="Swap sides (S)" aria-label="Swap sides">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h12m-3-3 3 3-3 3M17 14H5m3 3-3-3 3-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <details class="settings">
+        <summary class="icon-control" title="Comparison settings" aria-label="Comparison settings">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5h12M7 10h9M4 15h12M7 3v4m6 1v4m-6 1v4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </summary>
+        <div class="settings-card">
+          <button class="setting-row" data-action="mobile"><span>Mobile panes</span><span class="state">Off</span></button>
+          <button class="setting-row" data-action="mirror"><span>Mirror links</span><span class="state">Off</span></button>
+          <button class="setting-row" data-action="scroll-mode"><span>Scroll mode</span><span class="state">Exact</span></button>
+        </div>
+      </details>
+      <button class="icon" data-action="notes" title="Review notes" aria-label="Review notes">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 15 13.5H9L5 17v-3.5A1.5 1.5 0 0 1 3.5 12V5A1.5 1.5 0 0 1 5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        <span class="count">0</span>
+      </button>
+      <details class="help">
+        <summary class="icon-control" title="Help and keyboard shortcuts" aria-label="Help and keyboard shortcuts">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8.3 7.4a1.9 1.9 0 1 1 2.4 1.8c-.7.3-.9.7-.9 1.4M10 14h.01" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </summary>
+        <div class="help-card">
+          <strong>sitedrift</strong>
+          <p class="help-blurb">Local dev and production, locked to the same route and scroll. Compare side&#8209;by&#8209;side, drag the divider, or <b>Overlay</b> the panes — flip overlay to <b>Diff</b> and only the pixels that changed light up.</p>
+          <dl class="shortcut-list">
+            <dt><kbd>O</kbd></dt><dd>Overlay on/off (restores your layout)</dd>
+            <dt><kbd>D</kbd></dt><dd>Difference blend (while overlaid)</dd>
+            <dt><kbd>S</kbd></dt><dd>Swap sides (flip in Solo)</dd>
+            <dt><kbd>R</kbd></dt><dd>Reload both panes</dd>
+            <dt><kbd>0</kbd></dt><dd>Reset divider to 50/50</dd>
+            <dt><kbd>/</kbd></dt><dd>Focus the route field</dd>
+            <dt><kbd>Space</kbd></dt><dd>Page down / up with Shift</dd>
+            <dt><kbd>Esc</kbd></dt><dd>Close notes &amp; popovers</dd>
+          </dl>
+          <div class="help-credit">Created by <a href="https://github.com/joeseverino" target="_blank" rel="noreferrer">Joe Severino</a> · <span>github.com/joeseverino</span></div>
+        </div>
+      </details>
+    </header>
+    <section class="labels">
+      <div class="label" data-label="dev">
+        <div class="identity">
+          <span class="pill dev">DEV</span>
+          <img class="favicon" alt="">
+          <span class="page-meta"><span class="page-heading">Loading…</span><span class="origin"></span></span>
+        </div>
+        <div class="label-actions">
+          <span class="status-badge" data-status></span>
+          <span class="meta-diff" data-metadiff title="Title, description, or canonical differs between sides">≠ meta</span>
+          <details><summary class="seo-summary">SEO<span class="seo-flag" hidden></span> <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 4.5 3.5 3 3.5-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="seo-card"></div></details>
+          <a class="open-side" target="_blank" rel="noreferrer">Open <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2h5.5v5.5M10 2 4 8m-2-4v6h6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+      </div>
+      <div class="label" data-label="live">
+        <div class="identity">
+          <span class="pill live">LIVE</span>
+          <img class="favicon" alt="">
+          <span class="page-meta"><span class="page-heading">Loading…</span><span class="origin"></span></span>
+        </div>
+        <div class="label-actions">
+          <span class="status-badge" data-status></span>
+          <span class="meta-diff" data-metadiff title="Title, description, or canonical differs between sides">≠ meta</span>
+          <details><summary class="seo-summary">SEO<span class="seo-flag" hidden></span> <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 4.5 3.5 3 3.5-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div class="seo-card"></div></details>
+          <a class="open-side" target="_blank" rel="noreferrer">Open <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 2h5.5v5.5M10 2 4 8m-2-4v6h6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+        </div>
+      </div>
+    </section>
+    <header class="compactbar">
+      <button class="caret" data-action="compact" title="Expand review chrome" aria-label="Expand review chrome">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 10 5-5 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="compact-side" data-compact-side="dev"><span class="pill dev">DEV</span><span class="compact-title" data-compact-title="dev">Loading…</span><span class="status-badge"></span></div>
+      <div class="compact-controls">
+        <div class="modes" role="group" aria-label="View mode">
+          <button data-mode="split">Split</button>
+          <button data-mode="solo">Solo</button>
+          <button data-mode="overlay">Overlay</button>
+        </div>
+        <div class="overlay-slider">
+          <input type="range" min="0" max="100" value="50" aria-label="Overlay opacity">
+          <button class="overlay-blend" data-action="overlay-blend" title="Difference blend (D)" aria-pressed="false">Diff</button>
+        </div>
+        <button class="icon" data-action="reload" title="Reload both panes" aria-label="Reload both panes">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.5V3m0 0H12m3.5 0-2.2 2.2A6 6 0 1 0 15.8 11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="compact-side" data-compact-side="live"><span class="pill live">LIVE</span><span class="compact-title" data-compact-title="live">Loading…</span><span class="status-badge"></span></div>
+      <button class="icon" data-action="notes" title="Review notes" aria-label="Review notes">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3.5h10a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 15 13.5H9L5 17v-3.5A1.5 1.5 0 0 1 3.5 12V5A1.5 1.5 0 0 1 5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </button>
+    </header>
+    <section class="stage">
+      <div class="pane" data-pane="dev"><iframe data-side="dev" title="Development site"></iframe></div>
+      <div class="pane" data-pane="live"><iframe data-side="live" title="Live site"></iframe></div>
+      <div class="divider" role="separator" aria-label="Resize comparison panes" aria-orientation="vertical" tabindex="0"><span class="grip"></span></div>
+    </section>
+    <div class="diff-legend" aria-hidden="true">Difference · lit = changed · black = identical</div>
+  </main>
+  <aside class="review-drawer" aria-label="Review notes">
+    <div class="drawer-head">
+      <strong>Review notes</strong>
+      <button class="icon" data-action="notes-dock" title="Dock: push the panes aside vs float over them" aria-label="Dock notes" aria-pressed="false">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><line x1="12.5" y1="4" x2="12.5" y2="16" stroke="currentColor" stroke-width="1.6"/></svg>
+      </button>
+      <button class="icon" data-action="notes-close" aria-label="Close notes">×</button>
+    </div>
+    <ol class="note-list"></ol>
+    <div class="note-compose">
+      <div class="note-grip" title="Drag to resize" aria-hidden="true"></div>
+      <div class="note-input">
+        <textarea placeholder="Add a change, question, or thing to verify…"></textarea>
+        <button class="note-submit" data-action="note-add" title="Add note (⌘↵)" aria-label="Add note">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="note-actions"><button data-action="note-vault" hidden>Send to vault</button><button data-action="note-export">Export .md</button></div>
+    </div>
+  </aside>
+  <div class="toast" role="status"></div>
+  <script>window.__SITEDRIFT_CONFIG__ = __CONFIG__;</script>
+  <script src="/viewer.js?v=__VERSION__" defer></script>
+</body>
+</html>

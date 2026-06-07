@@ -13,22 +13,37 @@ several parts look redundant but are load-bearing.
 
 ## 1. Shape and constraints
 
-- **One file, zero runtime dependencies.** Only Node stdlib (`http`, `https`,
-  `fs`, `os`, `url`, global `fetch`). This is a hard design constraint: it keeps
-  the tool copy-pasteable and trivial to vendor. Do not add dependencies without
-  a deliberate decision to give that up.
-- **The viewer is server-rendered as a single HTML string** (`viewerHtml()`),
-  CSS and client JS inlined. There is no build step and no client framework.
+- **Zero runtime dependencies, no build step.** Only Node stdlib (`http`,
+  `https`, `fs`, `os`, `child_process`, `url`, global `fetch`). This is a hard
+  design constraint — do not add dependencies without a deliberate decision to
+  give that up. There is no bundler: the source ships as-is and `npx sitedrift`
+  runs it directly.
+- **Small modules + static assets.** The server is split into focused ES modules
+  under `src/`; the viewer ships as real files under `assets/`:
+
+  | File | Responsibility |
+  |---|---|
+  | `sitedrift.mjs` | bin entry — resolve config, start server, log, `--open`. |
+  | `src/cli.mjs` | arg parsing, env resolution, `--help`/`--version`. |
+  | `src/server.mjs` | the request handler + http/https server. |
+  | `src/proxy.mjs` | reverse proxy + `rewriteRootPaths` (§3). |
+  | `src/notes.mjs` | the notes store — load/save/markdown/ops (§8). |
+  | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
+  | `src/http.mjs` | `send` / `readBody` helpers. |
+  | `src/browser.mjs` | cross-platform `--open`. |
+  | `assets/viewer.{html,css,js}` | the viewer — edited as real HTML/CSS/JS. |
+  | `assets/icon.svg` | served at `/icon.svg`, favicon + toolbar mark. |
+
+  The viewer is static except a single `config` object (`dev`, `live`, `brand`,
+  `author`, `vault`) injected as `window.__SITEDRIFT_CONFIG__`. `viewer.css` and
+  `viewer.js` are served as their own cacheable routes; `/` returns only the
+  shell (~12 KB instead of ~75 KB inline).
 - **It is a development tool**, not a server. It mutates global response headers
   (§7) and binds to loopback by default. Never expose it publicly.
 
-Two artifacts ship alongside the module:
-
-- `sitedrift-icon.svg` — read at startup, served at `/icon.svg`, used as the
-  favicon and toolbar mark.
-- The `site` CLI wrapper — process lifecycle, TLS cert wiring, and the
-  version/health handshake (§9). The CLI is *not* part of the package surface;
-  the module is self-launching via env vars.
+The `site` CLI wrapper (process lifecycle, TLS cert wiring, the version/health
+handshake §9) is *not* part of the package surface; the bin is self-launching
+via flags or `SITEDRIFT_*` / legacy `SITE_COMPARE_*` env vars.
 
 ---
 
@@ -50,6 +65,7 @@ otherwise            →  http.createServer()
 | `/notes.md` | Markdown render of the list. |
 | `/notes/save` | `POST` writes the markdown into `SITE_COMPARE_VAULT` (§8.4). |
 | `/icon.svg` | The startup-loaded SVG, cached 1 day. |
+| `/viewer.css`, `/viewer.js` | The viewer assets, cached 1 day. |
 | `/__dev/*` | `proxy(req, res, 'dev', url)` (§3). |
 | `/__live/*` | `proxy(req, res, 'live', url)` (§3). |
 | _fallback_ | **Referer-based asset rescue**, else the viewer (§3.3). |
@@ -336,55 +352,44 @@ server's `/health`:
 
 ---
 
-## 10. Extraction map → npm package
+## 10. Module layout (extraction — done)
 
-The file is currently monolithic. These are the natural module seams; the
-boundaries below are already clean (each communicates through small, explicit
-interfaces), so extraction is mechanical rather than a rewrite.
+The original single file was split along the seams below (see the table in §1).
+The split was proven byte-faithful: the de-templated `assets/viewer.css` and
+`assets/viewer.js` were diffed against the previously-rendered viewer and are
+identical, so the extraction changed structure, not behavior.
 
 ```
 sitedrift/
+  sitedrift.mjs        // bin entry
   src/
-    config.js          // env parsing, cleanBase, startup icon load
-    proxy.js           // targetFor, rewriteRootPaths, proxy(), header strip set
-    notes.js           // load/save/apply ops, markdown, schema  ← pure, unit-testable
-    server.js          // handler routing table, http/https bootstrap
-    viewer/
-      html.js          // viewerHtml(config) → string (head + body markup)
-      styles.css       // lifted out of the template literal
-      client/
-        state.js       // queryOrStoredBool, setUrlParam, saveBool
-        proxy-paths.js // normalizeRoute, proxied, direct, routeFromFrameUrl
-        scroll.js      // the §5 controller — the crown jewel, isolate first
-        layout.js      // split/solo/overlay/mobile + applyOrder exclusivity
-        metadata.js    // renderMetadata, renderMetaDiff, status badges
-        notes.js       // poll/post/render drawer
-        viewer.js      // wiring + init
-    bin/
-      site-compare.js  // CLI: arg parse, lifecycle, TLS, the §9 handshake
-                       //   (subsumes what the `site compare` wrapper does today)
+    cli.mjs            // arg parse, env resolution, help/version, cleanBase
+    server.mjs         // handler routing table, http/https bootstrap
+    proxy.mjs          // targetFor, rewriteRootPaths, proxy(), header strip set
+    notes.mjs          // load/save/apply ops, markdown  ← pure, unit-testable
+    viewer.mjs         // loads assets/, injects the per-run config blob
+    http.mjs           // send / readBody
+    browser.mjs        // cross-platform --open
+  assets/
+    viewer.html        // head + body markup (placeholders __VERSION__/__CONFIG__)
+    viewer.css         // lifted out of the template literal
+    viewer.js          // the client bundle (state, scroll, layout, notes, init)
+    icon.svg
 ```
 
-Suggested order of extraction, lowest-risk first:
+Notes on what shipped vs. the original plan:
 
-1. **`notes.js`** — already pure (no DOM, no server globals). Lift it, add unit
-   tests for `applyNoteOp` concurrency and `notesMarkdown`. Zero behavior risk.
-2. **`proxy.js`** — pure functions over strings + a `fetch`; testable with
-   recorded fixtures. Pin the §3.3 referer behavior with a test *here*, since it
-   has none today.
-3. **`config.js` / `server.js`** — mechanical.
-4. **`viewer/` split** — the client code is the bulk; do it last and behind the
-   `node --check`-the-inline-script gate (§4) at each step. **Extract
-   `scroll.js` as its own unit with the §5 invariants as test names** — if any
-   single module deserves a test suite, it's this one.
-5. **`bin/site-compare.js`** — fold the CLI's lifecycle/TLS/handshake logic in so
-   `npx site-compare` is the whole story; keep env-var launch working for the
-   embedded case.
+- **Assets are served as their own routes** (`/viewer.css`, `/viewer.js`), not
+  re-inlined — chosen for cacheability and a small `/` shell. This *adds* the
+  asset-serving the referer rescue (§3.3) avoids for proxied pages, but these are
+  explicit routes matched *before* the fallback, so §3.3 is unaffected. Verified:
+  proxying a live route still returns 200 with rewritten paths.
+- **No build step** — the source ships as-is; `viewer.mjs` does placeholder
+  substitution at request time, not a bundle.
 
-Once split, the only thing standing between this and `npx site-compare` is a
-`bin` entry and the build step that re-inlines `styles.css` + `client/*` into
-`viewer/html.js` (or ships them as static routes — note this *adds* the asset-
-serving the referer rescue currently avoids, so re-test §3.3 after that change).
+Remaining opportunity (not yet done): `assets/viewer.js` is still one ~945-line
+file. The §5 scroll controller is the crown jewel and the best first candidate to
+split into its own client module with the §5 invariants as test names.
 
 ---
 

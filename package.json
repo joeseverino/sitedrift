@@ -8,6 +8,10 @@
   },
   "files": [
     "sitedrift.mjs",
+    "src/",
+    "assets/viewer.html",
+    "assets/viewer.css",
+    "assets/viewer.js",
     "assets/icon.svg",
     "README.md",
     "LICENSE"
@@ -17,7 +21,7 @@
   },
   "scripts": {
     "start": "node sitedrift.mjs",
-    "test": "node --check sitedrift.mjs"
+    "test": "for f in sitedrift.mjs src/*.mjs; do node --check \"$f\" || exit 1; done"
   },
   "publishConfig": {
     "access": "public"
