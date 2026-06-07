@@ -76,6 +76,8 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.match(body, /src="\/__sitedrift\/dev\/image.png"/);
   assert.match(body, /sitedrift-frame/);
+  assert.match(body, /send\('dismiss'\)/);
+  assert.match(body, /transferSize/);
 });
 
 test('the edge runtime is read-only', async () => {

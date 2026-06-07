@@ -133,7 +133,11 @@ button:focus-visible, summary:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 .compact-side { min-inline-size: 0; display: flex; align-items: center; gap: 6px; }
+.app.solo .compact-side { cursor: pointer; }
+.compact-favicon { display: block; flex: 0 0 auto; inline-size: 16px; block-size: 16px; border-radius: 4px; }
+.compact-copy { min-inline-size: 0; display: flex; align-items: baseline; gap: 7px; overflow: hidden; }
 .compact-title { min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.compact-origin { min-inline-size: 0; overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .compact-controls { display: flex; align-items: center; gap: 8px; justify-self: center; }
 
 .caret {
@@ -322,6 +326,10 @@ button[data-action="notes"] {
 .status-warn { color: var(--on-accent); background: var(--warn); }
 .status-err { color: #fff; background: var(--err); }
 .compact-side .status-badge { block-size: 16px; }
+
+@media (width <= 600px) {
+  .compact-origin { display: none; }
+}
 
 .meta-diff {
   display: none;

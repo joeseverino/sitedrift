@@ -11,6 +11,14 @@ export function frameBridge(side, prefix = `/__${side}`) {
       const title=(document.title||'').trim();
       const description=q('meta[name="description"]')?.content?.trim()||'';
       const canonical=q('link[rel="canonical"]')?.href||'';
+      const navigation=performance.getEntriesByType('navigation')[0];
+      const timing=navigation?{
+        response:Math.round(navigation.responseEnd),
+        dom:Math.round(navigation.domContentLoadedEventEnd),
+        load:Math.round(navigation.loadEventEnd||navigation.duration),
+        transfer:Number(navigation.transferSize)||0,
+        decoded:Number(navigation.decodedBodySize)||0
+      }:null;
       const checks=[
         ['Title present',!!title],['Title 30–60 chars',title.length>=30&&title.length<=60,title.length+''],
         ['Meta description',!!description],['Description 70–160',description.length>=70&&description.length<=160,description.length+''],
@@ -23,7 +31,7 @@ export function frameBridge(side, prefix = `/__${side}`) {
         ['Images have alt',imgs.every((img)=>img.hasAttribute('alt')),imgs.filter((img)=>!img.hasAttribute('alt')).length+' missing']
       ].map(([label,ok,note])=>({label,ok,note}));
       send('ready',{route:route(),meta:{title,description,canonical,heading:q('h1')?.textContent?.trim()||'',
-        siteName:q('meta[property="og:site_name"]')?.content?.trim()||'',icon:q('link[rel~="icon"]')?.href||'',checks}});
+        siteName:q('meta[property="og:site_name"]')?.content?.trim()||'',icon:q('link[rel~="icon"]')?.href||'',checks,timing}});
       send('scroll',{y:scrollY,max:Math.max(0,root().scrollHeight-innerHeight)});
     };
     addEventListener('message',(event)=>{
@@ -43,6 +51,7 @@ export function frameBridge(side, prefix = `/__${side}`) {
       if(linked&&!typing&&!event.metaKey&&!event.ctrlKey&&!event.altKey)send('key',{key:event.key,shift:event.shiftKey,y:scrollY,height:innerHeight,max:Math.max(0,root().scrollHeight-innerHeight)});
     },true);
     addEventListener('click',(event)=>{
+      send('dismiss');
       if(!mirror||event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
       const link=event.target.closest('a[href]');if(!link||link.target==='_blank'||link.hasAttribute('download'))return;
       const url=new URL(link.href,location.href);if(url.origin!==location.origin||!url.pathname.startsWith(prefix))return;

@@ -30,10 +30,10 @@
     const settleTimers = { dev: [], live: [] };
     const frameState = { dev: { y: 0, max: 0 }, live: { y: 0, max: 0 } };
     let order = params.get('swap') === '1' ? ['live', 'dev'] : ['dev', 'live'];
-    let syncScroll = queryOrStoredBool('scroll', 'site-compare-scroll', false);
+    let syncScroll = queryOrStoredBool('scroll', 'site-compare-scroll', !!config.hosted);
     let scrollMode = params.get('scrollMode') || localStorage.getItem('site-compare-scroll-mode') || 'exact';
     if (!['exact', 'ratio'].includes(scrollMode)) scrollMode = 'exact';
-    let mirrorLinks = queryOrStoredBool('mirror', 'site-compare-mirror', false);
+    let mirrorLinks = queryOrStoredBool('mirror', 'site-compare-mirror', !!config.hosted);
     let mobileMode = (params.get('mode') || localStorage.getItem('site-compare-mode')) === 'mobile';
     let compactMode = queryOrStoredBool('compact', 'site-compare-compact', !!config.hosted);
     const storedView = localStorage.getItem('site-compare-view');
@@ -54,6 +54,7 @@
     let dockMode = queryOrStoredBool('dock', 'site-compare-dock', true);
     let scrollOwner = null;
     const meta = { dev: null, live: null };
+    const statusDetails = { dev: {}, live: {} };
     const apiHeaders = {
       authorization: 'Bearer ' + config.token,
       'content-type': 'application/json',
@@ -100,6 +101,31 @@
       ].filter(Boolean);
     }
 
+    function formatMs(value) {
+      return Number.isFinite(value) && value >= 0 ? `${Math.round(value)} ms` : '';
+    }
+
+    function formatBytes(value) {
+      if (!Number.isFinite(value) || value <= 0) return '';
+      if (value < 1024) return `${Math.round(value)} B`;
+      if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+      return `${(value / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function statusTitle(side, status) {
+      const detail = statusDetails[side];
+      const lines = [`${side.toUpperCase()} returned ${status || 'an error'}`];
+      if (detail.requestMs) lines.push(`Status check: ${formatMs(detail.requestMs)}`);
+      if (detail.response) lines.push(`Document response: ${formatMs(detail.response)}`);
+      if (detail.dom) lines.push(`DOM ready: ${formatMs(detail.dom)}`);
+      if (detail.load) lines.push(`Window load: ${formatMs(detail.load)}`);
+      const size = formatBytes(detail.transfer || detail.decoded);
+      if (size) lines.push(`${detail.transfer ? 'Transferred' : 'Decoded size'}: ${size}`);
+      if (detail.type) lines.push(`Content-Type: ${detail.type}`);
+      if (detail.cache) lines.push(`Cache-Control: ${detail.cache}`);
+      return lines.join('\n');
+    }
+
     function setStatusBadge(side, status) {
       const cls = status >= 200 && status < 300 ? 'status-ok'
         : status >= 300 && status < 400 ? 'status-warn'
@@ -108,6 +134,8 @@
       for (const badge of statusBadges(side)) {
         badge.className = 'status-badge show ' + cls;
         badge.textContent = text;
+        badge.title = statusTitle(side, status);
+        badge.setAttribute('aria-label', badge.title.replaceAll('\n', '. '));
       }
     }
 
@@ -115,15 +143,26 @@
       for (const badge of statusBadges(side)) {
         badge.className = 'status-badge';
         badge.textContent = '';
+        badge.removeAttribute('title');
+        badge.removeAttribute('aria-label');
       }
     }
 
     function fetchStatus(side, route) {
       const url = statusUrl(side, route);
+      const started = performance.now();
       const read = (method) => fetch(url, { method, cache: 'no-store', redirect: 'manual' });
       read('HEAD')
         .then((res) => (res.status === 405 || res.status === 501 ? read('GET') : res))
-        .then((res) => setStatusBadge(side, res.status || (res.type === 'opaqueredirect' ? 302 : 0)))
+        .then((res) => {
+          statusDetails[side] = {
+            ...statusDetails[side],
+            requestMs: performance.now() - started,
+            type: res.headers.get('content-type') || '',
+            cache: res.headers.get('cache-control') || '',
+          };
+          setStatusBadge(side, res.status || (res.type === 'opaqueredirect' ? 302 : 0));
+        })
         .catch(() => setStatusBadge(side, 0));
     }
 
@@ -239,14 +278,26 @@
       let canonicalPath = canonical;
       try { canonicalPath = new URL(canonical).pathname; } catch {}
       meta[side] = { title, description, canonicalPath, heading };
+      statusDetails[side] = { ...statusDetails[side], ...(source.timing || {}) };
       label.querySelector('.page-heading').textContent = heading;
       label.querySelector('.page-heading').title = title || heading;
       updateDocTitle();
-      document.querySelector('[data-compact-title="' + side + '"]').textContent = heading;
+      const compactTitle = document.querySelector('[data-compact-title="' + side + '"]');
+      compactTitle.textContent = heading;
+      compactTitle.title = title || heading;
+      const compactOrigin = document.querySelector('[data-compact-origin="' + side + '"]');
+      compactOrigin.textContent = new URL(config[side]).host + route;
+      compactOrigin.title = config[side] + route;
       label.querySelector('.origin').textContent = config[side] + route;
       const fav = label.querySelector('.favicon');
       fav.onerror = () => { fav.onerror = null; fav.src = '/icon.svg'; };
       fav.src = faviconSrc;
+      const compactFav = document.querySelector('[data-compact-favicon="' + side + '"]');
+      compactFav.onerror = () => {
+        compactFav.onerror = null;
+        compactFav.src = config.hosted ? '/__sitedrift/assets/icon.svg' : '/icon.svg';
+      };
+      compactFav.src = faviconSrc;
       label.querySelector('.open-side').href = direct(side, route);
       const card = label.querySelector('.seo-card');
       const sourceRow = element('div', 'seo-source');
@@ -347,10 +398,14 @@
         label.querySelector('.pill').textContent = side.toUpperCase();
         label.querySelector('.page-heading').textContent = 'Loading…';
         document.querySelector('[data-compact-title="' + side + '"]').textContent = 'Loading…';
+        document.querySelector('[data-compact-origin="' + side + '"]').textContent =
+          new URL(config[side]).host + route;
+        document.querySelector('[data-compact-favicon="' + side + '"]').removeAttribute('src');
         label.querySelector('.origin').textContent = config[side] + route;
         label.querySelector('.favicon').src = '/__' + side + '/favicon.ico';
         label.querySelector('.open-side').href = direct(side, route);
         meta[side] = null;
+        statusDetails[side] = {};
         clearStatusBadge(side);
       }
       renderMetaDiff();
@@ -501,10 +556,16 @@
         setLinkedScroll(side, frameState[side].y + delta);
       } else if (message.type === 'navigate') {
         go(message.route);
+      } else if (message.type === 'dismiss') {
+        closePopovers();
       } else if (message.type === 'key') {
         runFrameKey(message.key, side, message);
       }
     });
+
+    function closePopovers() {
+      for (const details of document.querySelectorAll('details[open]')) details.removeAttribute('open');
+    }
     scrollButton.addEventListener('click', () => {
       syncScroll = !syncScroll;
       scrollButton.classList.toggle('active', syncScroll);
@@ -595,6 +656,14 @@
       renderModes();
     }
     for (const button of modeButtons) button.addEventListener('click', () => setMode(button.dataset.mode));
+    for (const identity of document.querySelectorAll('.compact-side')) {
+      identity.addEventListener('click', () => {
+        if (viewMode !== 'solo') return;
+        focusSide = identity.dataset.compactSide === 'dev' ? 'live' : 'dev';
+        app.dataset.focus = focusSide;
+        renderModes();
+      });
+    }
     for (const slider of overlaySliders) slider.addEventListener('input', () => {
       if (viewMode !== 'overlay') setMode('overlay');
       if (overlayBlend === 'difference') setOverlayBlend('opacity');

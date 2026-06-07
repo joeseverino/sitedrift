@@ -8,4 +8,9 @@ test('hosted frames allow same-origin styling and deployed interactions', () => 
   assert.match(sandbox, /\ballow-same-origin\b/);
   assert.match(sandbox, /\ballow-scripts\b/);
   assert.doesNotMatch(source, /function hostedSnapshot\(side\)/);
+  assert.match(source, /message\.type === 'dismiss'/);
+  assert.match(source, /data-compact-origin/);
+  assert.match(source, /function statusTitle\(side, status\)/);
+  assert.match(source, /site-compare-scroll', !!config\.hosted/);
+  assert.match(source, /site-compare-mirror', !!config\.hosted/);
 });
