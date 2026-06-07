@@ -4,7 +4,10 @@
       config.dev = location.origin;
       config.frameOrigins = { dev: location.origin, live: location.origin };
       for (const iframe of document.querySelectorAll('iframe[data-side]')) {
-        iframe.setAttribute('sandbox', 'allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts');
+        // Same-origin is required for Safari to apply `style-src 'self'` inside
+        // the frame. Scripts stay disabled so framed site code cannot reach
+        // the same-origin sitedrift parent.
+        iframe.setAttribute('sandbox', 'allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin');
       }
     }
     const root = document.documentElement;

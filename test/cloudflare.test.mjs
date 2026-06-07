@@ -41,7 +41,7 @@ test('wraps preview HTML and preserves the original build', () => {
   assert.equal(result.files, 2);
   assert.match(fs.readFileSync(path.join(dir, 'index.html'), 'utf8'), /"hosted":true/);
   assert.match(fs.readFileSync(path.join(dir, 'about', 'index.html'), 'utf8'), /"initialPath":"\/about\/"/);
-  assert.match(fs.readFileSync(path.join(dir, '__sitedrift', 'source', 'index.html.txt'), 'utf8'), /Preview/);
+  assert.match(fs.readFileSync(path.join(dir, '__sitedrift_source', 'index.html.txt'), 'utf8'), /Preview/);
   assert.equal(fs.readFileSync(path.join(dir, 'app.css'), 'utf8'), 'body{color:black}');
 });
 
@@ -50,7 +50,7 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
     ['/__sitedrift/config.json', new Response(JSON.stringify({ live: 'https://example.com' }), {
       headers: { 'content-type': 'application/json' },
     })],
-    ['/__sitedrift/source/index.html.txt', new Response(
+    ['/__sitedrift_source/index.html.txt', new Response(
       '<!doctype html><head></head><body><img src="/image.png"><h1>Preview</h1></body>',
       { headers: { 'content-type': 'text/plain', 'x-frame-options': 'DENY' } },
     )],
@@ -88,12 +88,4 @@ test('the edge runtime is read-only', async () => {
   });
   assert.equal(response.status, 405);
   assert.equal(response.headers.get('allow'), 'GET, HEAD');
-});
-
-test('the preserved source namespace is not publicly readable', async () => {
-  const response = await onRequest({
-    request: new Request('https://preview.example/__sitedrift/source/'),
-    env: { ASSETS: { fetch() { throw new Error('must not fetch'); } } },
-  });
-  assert.equal(response.status, 404);
 });

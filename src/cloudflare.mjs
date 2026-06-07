@@ -53,7 +53,7 @@ export function installCloudflarePreview({
 
   const liveUrl = secureLive(live);
   const internal = path.join(output, '__sitedrift');
-  const source = path.join(internal, 'source');
+  const source = path.join(output, '__sitedrift_source');
   const assetDir = path.join(internal, 'assets');
   fs.mkdirSync(source, { recursive: true });
   fs.mkdirSync(assetDir, { recursive: true });
