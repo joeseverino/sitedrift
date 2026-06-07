@@ -7,7 +7,7 @@ const ALIASES = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'vers
 const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version']);
 const VALUE_FLAGS = new Set([
   'dev', 'live', 'port', 'host', 'cert', 'key', 'notes', 'brand', 'author',
-  'vault', 'config', 'route', 'side',
+  'vault', 'config', 'route', 'side', 'dir', 'production-branch',
 ]);
 const KNOWN_FLAGS = new Set([...BOOLEANS, ...VALUE_FLAGS]);
 const CONFIG_NAMES = ['sitedrift.config.json', '.sitedriftrc.json'];
@@ -110,6 +110,7 @@ Usage:
   sitedrift status
   sitedrift context
   sitedrift mcp
+  sitedrift cloudflare --dir dist --live https://example.com
   sitedrift notes list
   sitedrift notes add <text> [--route /path] [--side dev|live] [--author name]
   sitedrift notes resolve|reopen|remove <id>
@@ -179,7 +180,22 @@ export function resolveConfig(argv = process.argv.slice(2)) {
 
 export function parseCommand(argv = process.argv.slice(2)) {
   const name = argv[0];
-  if (name !== 'status' && name !== 'context' && name !== 'notes' && name !== 'mcp') return null;
+  if (!['status', 'context', 'notes', 'mcp', 'cloudflare'].includes(name)) return null;
+  if (name === 'cloudflare') {
+    const { opts, positionals } = parseArgs(argv.slice(1));
+    if (positionals.length) throw new Error(`Unexpected argument: ${positionals[0]}`);
+    if (!opts.live) throw new Error('sitedrift cloudflare requires --live.');
+    return {
+      command: {
+        name,
+        dir: opts.dir || 'dist',
+        live: opts.live,
+        brand: opts.brand || '',
+        productionBranch: opts['production-branch'] || 'main',
+      },
+      argv: [],
+    };
+  }
   if (name === 'mcp') {
     if (argv.length > 1) throw new Error('Usage: sitedrift mcp');
     return { command: { name }, argv: [] };

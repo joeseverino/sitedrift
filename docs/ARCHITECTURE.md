@@ -33,6 +33,9 @@ several parts look redundant but are load-bearing.
   | `src/session.mjs` | private session token + discovery file lifecycle. |
   | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
   | `src/tls.mjs` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
+  | `src/cloudflare.mjs` | preview-only static-build wrapper. |
+  | `src/cloudflare-runtime.mjs` | read-only scoped Pages Function proxy. |
+  | `src/frame-content.mjs` | shared URL rewriting and frame bridge injection. |
   | `src/http.mjs` | `send` / `readBody` helpers. |
   | `src/browser.mjs` | cross-platform `--open`. |
   | `assets/viewer.{html,css,js}` | the viewer — edited as real HTML/CSS/JS. |

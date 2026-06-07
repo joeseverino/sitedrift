@@ -6,6 +6,7 @@ import { openBrowser } from './src/browser.mjs';
 import { runAgentCommand } from './src/agent.mjs';
 import { createSession, removeSession, writeSession } from './src/session.mjs';
 import { runMcpServer } from './src/mcp.mjs';
+import { installCloudflarePreview } from './src/cloudflare.mjs';
 
 let command;
 let config;
@@ -19,6 +20,16 @@ try {
 
 if (command?.name === 'mcp') {
   runMcpServer();
+} else if (command?.name === 'cloudflare') {
+  try {
+    const result = installCloudflarePreview(command);
+    console.log(result.installed
+      ? `sitedrift: wrapped ${result.files} HTML files for Cloudflare preview ${result.branch}`
+      : `sitedrift: unchanged (${result.reason})`);
+  } catch (error) {
+    console.error(`sitedrift: ${error.message}`);
+    process.exit(1);
+  }
 } else {
   try {
     const parsed = parseCommand();

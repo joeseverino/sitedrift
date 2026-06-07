@@ -1,5 +1,12 @@
-const config = window.__SITEDRIFT_CONFIG__;
+    const config = window.__SITEDRIFT_CONFIG__;
     delete window.__SITEDRIFT_CONFIG__;
+    if (config.hosted) {
+      config.dev = location.origin;
+      config.frameOrigins = { dev: location.origin, live: location.origin };
+      for (const iframe of document.querySelectorAll('iframe[data-side]')) {
+        iframe.setAttribute('sandbox', 'allow-downloads allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-scripts');
+      }
+    }
     const root = document.documentElement;
     const app = document.querySelector('.app');
     const routeInput = document.querySelector('.route');
@@ -26,18 +33,19 @@ const config = window.__SITEDRIFT_CONFIG__;
     if (!['exact', 'ratio'].includes(scrollMode)) scrollMode = 'exact';
     let mirrorLinks = queryOrStoredBool('mirror', 'site-compare-mirror', false);
     let mobileMode = (params.get('mode') || localStorage.getItem('site-compare-mode')) === 'mobile';
-    let compactMode = queryOrStoredBool('compact', 'site-compare-compact', false);
+    let compactMode = queryOrStoredBool('compact', 'site-compare-compact', !!config.hosted);
     const storedView = localStorage.getItem('site-compare-view');
     let viewMode = params.get('view')
       || (params.get('overlay') === '1' ? 'overlay' : params.get('solo') === '1' ? 'solo' : null)
       || storedView
+      || (config.hosted ? 'solo' : null)
       || (innerWidth <= 600 ? 'solo' : 'split');
     let overlayBlend = (params.get('overlayBlend') || localStorage.getItem('site-compare-overlay-blend')) === 'difference' ? 'difference' : 'opacity';
     if (viewMode === 'diff') { viewMode = 'overlay'; overlayBlend = 'difference'; } // back-compat
     if (!['split', 'solo', 'overlay'].includes(viewMode)) viewMode = 'split';
     let overlayAmount = Number(params.get('overlayAmount') ?? localStorage.getItem('site-compare-overlay-amount'));
     if (!Number.isFinite(overlayAmount)) overlayAmount = 50;
-    let focusSide = params.get('focus') === 'live' ? 'live' : params.get('focus') === 'dev' ? 'dev' : order[0];
+    let focusSide = params.get('focus') === 'live' ? 'live' : params.get('focus') === 'dev' ? 'dev' : 'dev';
     let reviewNotes = [];
     let notesSignature = '';
     let notesOpen = params.get('notes') === '1';
@@ -48,6 +56,7 @@ const config = window.__SITEDRIFT_CONFIG__;
       authorization: 'Bearer ' + config.token,
       'content-type': 'application/json',
     };
+    const localNotesKey = 'sitedrift-preview-notes:' + location.host + ':' + config.live;
 
     function queryOrStoredBool(queryName, storageName, fallback) {
       if (params.has(queryName)) return params.get(queryName) === '1';
@@ -67,11 +76,19 @@ const config = window.__SITEDRIFT_CONFIG__;
     }
 
     function frame(side) { return document.querySelector('iframe[data-side="' + side + '"]'); }
-    function proxied(side, route) { return config.frameOrigins[side] + '/__' + side + normalizeRoute(route); }
-    function statusUrl(side, route) { return '/__' + side + normalizeRoute(route); }
-    function direct(side, route) { return config[side] + normalizeRoute(route); }
+    function proxyPath(side) { return config.hosted ? '/__sitedrift/' + side : '/__' + side; }
+    function proxied(side, route) { return config.frameOrigins[side] + proxyPath(side) + normalizeRoute(route); }
+    function statusUrl(side, route) { return proxyPath(side) + normalizeRoute(route); }
+    function direct(side, route) {
+      return config.hosted && side === 'dev'
+        ? location.origin + proxyPath(side) + normalizeRoute(route)
+        : config[side] + normalizeRoute(route);
+    }
     function framePost(side, type, data = {}) {
-      frame(side).contentWindow?.postMessage({ source: 'sitedrift-parent', side, type, ...data }, config.frameOrigins[side]);
+      frame(side).contentWindow?.postMessage(
+        { source: 'sitedrift-parent', side, type, ...data },
+        config.hosted ? '*' : config.frameOrigins[side],
+      );
     }
 
     function statusBadges(side) {
@@ -158,10 +175,34 @@ const config = window.__SITEDRIFT_CONFIG__;
       showToast.timer = setTimeout(() => toast.classList.remove('show'), 1600);
     }
 
-    function escapeHtml(value) {
-      return String(value || '').replace(/[&<>"']/g, (char) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-      })[char]);
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+
+    function copyIcon() {
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', '0 0 20 20');
+      svg.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', 'M8 8V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5v5A1.5 1.5 0 0 1 14.5 12H12');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'currentColor');
+      path.setAttribute('stroke-width', '1.5');
+      const rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', '4');
+      rect.setAttribute('y', '8');
+      rect.setAttribute('width', '8');
+      rect.setAttribute('height', '8');
+      rect.setAttribute('rx', '1.5');
+      rect.setAttribute('fill', 'none');
+      rect.setAttribute('stroke', 'currentColor');
+      rect.setAttribute('stroke-width', '1.5');
+      svg.append(path, rect);
+      return svg;
     }
 
     function truncate(value, max) {
@@ -192,7 +233,7 @@ const config = window.__SITEDRIFT_CONFIG__;
       const siteName = source.siteName
         || config.brand
         || new URL(direct(side, route)).hostname;
-      const faviconSrc = source.icon || (config.frameOrigins[side] + '/__' + side + '/favicon.ico');
+      const faviconSrc = source.icon || (config.frameOrigins[side] + proxyPath(side) + '/favicon.ico');
       let canonicalPath = canonical;
       try { canonicalPath = new URL(canonical).pathname; } catch {}
       meta[side] = { title, description, canonicalPath, heading };
@@ -205,19 +246,35 @@ const config = window.__SITEDRIFT_CONFIG__;
       fav.onerror = () => { fav.onerror = null; fav.src = '/icon.svg'; };
       fav.src = faviconSrc;
       label.querySelector('.open-side').href = direct(side, route);
-      label.querySelector('.seo-card').innerHTML =
-        '<div class="seo-eyebrow">' + side.toUpperCase() + ' metadata preview</div>' +
-        '<div class="seo-source">' +
-          '<img class="seo-favicon" alt="" src="' + escapeHtml(faviconSrc) + '">' +
-          '<div><div class="seo-site">' + escapeHtml(siteName) + '</div>' +
-          '<div class="seo-url" data-seo="url">' + escapeHtml(crumb(canonical)) + '</div></div>' +
-          '<div class="seo-menu" aria-hidden="true">⋮</div>' +
-        '</div>' +
-        '<div class="seo-title' + (title ? '' : ' seo-empty') + '" data-seo="title">' +
-          escapeHtml(truncate(title || 'Missing page title', 62)) + '</div>' +
-        '<div class="seo-description' + (description ? '' : ' seo-empty') + '" data-seo="desc">' +
-          escapeHtml(truncate(description || 'Missing meta description', 158)) + '</div>' +
-        seoChecksHtml(source.checks || []);
+      const card = label.querySelector('.seo-card');
+      const sourceRow = element('div', 'seo-source');
+      const seoFavicon = element('img', 'seo-favicon');
+      seoFavicon.alt = '';
+      seoFavicon.src = faviconSrc;
+      const sourceText = element('div');
+      sourceText.append(
+        element('div', 'seo-site', siteName),
+        element('div', 'seo-url', crumb(canonical)),
+      );
+      sourceText.lastChild.dataset.seo = 'url';
+      const menu = element('div', 'seo-menu', '⋮');
+      menu.setAttribute('aria-hidden', 'true');
+      sourceRow.append(seoFavicon, sourceText, menu);
+      const seoTitle = element('div', `seo-title${title ? '' : ' seo-empty'}`, truncate(title || 'Missing page title', 62));
+      seoTitle.dataset.seo = 'title';
+      const seoDescription = element(
+        'div',
+        `seo-description${description ? '' : ' seo-empty'}`,
+        truncate(description || 'Missing meta description', 158),
+      );
+      seoDescription.dataset.seo = 'desc';
+      card.replaceChildren(
+        element('div', 'seo-eyebrow', `${side.toUpperCase()} metadata preview`),
+        sourceRow,
+        seoTitle,
+        seoDescription,
+        seoChecks(source.checks || []),
+      );
       const seoFav = label.querySelector('.seo-favicon');
       if (seoFav) seoFav.onerror = () => { seoFav.onerror = null; seoFav.src = '/icon.svg'; };
       const fails = (source.checks || []).filter((check) => !check.ok).length;
@@ -230,20 +287,25 @@ const config = window.__SITEDRIFT_CONFIG__;
       renderMetaDiff();
     }
 
-    function seoChecksHtml(checks) {
+    function seoChecks(checks) {
       const fails = checks.filter((check) => !check.ok).length;
-      const head = '<div class="seo-checks-head"><span>SEO checks</span>'
-        + (fails
-          ? '<span class="bad">' + fails + ' to fix</span>'
-          : '<span class="good">all good</span>')
-        + '</div>';
-      const rows = checks.map((check) =>
-        '<div class="seo-check ' + (check.ok ? 'ok' : 'bad') + '">'
-        + '<span class="seo-check-mark">' + (check.ok ? '✓' : '✗') + '</span>'
-        + '<span class="seo-check-label">' + escapeHtml(check.label) + '</span>'
-        + (check.note ? '<span class="seo-check-note">' + escapeHtml(check.note) + '</span>' : '')
-        + '</div>').join('');
-      return '<div class="seo-checks">' + head + rows + '</div>';
+      const container = element('div', 'seo-checks');
+      const head = element('div', 'seo-checks-head');
+      head.append(
+        element('span', '', 'SEO checks'),
+        element('span', fails ? 'bad' : 'good', fails ? `${fails} to fix` : 'all good'),
+      );
+      container.append(head);
+      for (const check of checks) {
+        const row = element('div', `seo-check ${check.ok ? 'ok' : 'bad'}`);
+        row.append(
+          element('span', 'seo-check-mark', check.ok ? '✓' : '✗'),
+          element('span', 'seo-check-label', check.label),
+        );
+        if (check.note) row.append(element('span', 'seo-check-note', check.note));
+        container.append(row);
+      }
+      return container;
     }
 
     function positionSeoCard(details) {
@@ -420,7 +482,7 @@ const config = window.__SITEDRIFT_CONFIG__;
       const message = event.data || {};
       const side = message.side;
       if (!['dev', 'live'].includes(side)
-        || event.origin !== config.frameOrigins[side]
+        || (!config.hosted && event.origin !== config.frameOrigins[side])
         || message.source !== 'sitedrift-frame'
         || event.source !== frame(side).contentWindow) return;
       if (message.type === 'ready') {
@@ -561,6 +623,10 @@ const config = window.__SITEDRIFT_CONFIG__;
     }
 
     async function notesPull() {
+      if (config.localNotes) {
+        try { applyNotes(JSON.parse(localStorage.getItem(localNotesKey) || '[]')); } catch { applyNotes([]); }
+        return;
+      }
       try {
         const res = await fetch(config.api + '/notes', { cache: 'no-store', headers: apiHeaders });
         const data = await res.json();
@@ -569,6 +635,29 @@ const config = window.__SITEDRIFT_CONFIG__;
     }
 
     async function notesPost(op) {
+      if (config.localNotes) {
+        let notes = [...reviewNotes];
+        if (op.op === 'add') {
+          notes.push({
+            id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+            text: op.text,
+            author: op.author,
+            route: op.route,
+            side: op.side || null,
+            done: false,
+            createdAt: new Date().toISOString(),
+          });
+        } else if (op.op === 'toggle') {
+          notes = notes.map((note) => note.id === op.id ? { ...note, done: !note.done } : note);
+        } else if (op.op === 'remove') {
+          notes = notes.filter((note) => note.id !== op.id);
+        } else if (op.op === 'clear') {
+          notes = [];
+        }
+        localStorage.setItem(localNotesKey, JSON.stringify(notes));
+        applyNotes(notes);
+        return;
+      }
       try {
         const res = await fetch(config.api + '/notes', {
           method: 'POST',
@@ -632,7 +721,7 @@ const config = window.__SITEDRIFT_CONFIG__;
         copy.className = 'note-copy';
         copy.title = 'Copy a link to this note';
         copy.setAttribute('aria-label', 'Copy link to this note');
-        copy.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 8V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5v5A1.5 1.5 0 0 1 14.5 12H12" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="4" y="8" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>';
+        copy.append(copyIcon());
         copy.addEventListener('click', async () => {
           const url = new URL(location.href);
           url.searchParams.set('path', note.route || '/');
@@ -738,7 +827,15 @@ const config = window.__SITEDRIFT_CONFIG__;
     });
     document.querySelector('[data-action="note-export"]').addEventListener('click', () => {
       const link = document.createElement('a');
-      link.href = '/notes.md';
+      if (config.localNotes) {
+        const lines = ['# sitedrift review notes', ''];
+        for (const note of reviewNotes) {
+          lines.push(`- [${note.done ? 'x' : ' '}] ${note.text} (${note.side || 'both'} ${note.route || '/'})`);
+        }
+        link.href = URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/markdown' }));
+      } else {
+        link.href = '/notes.md';
+      }
       link.download = 'site-compare-notes.md';
       link.click();
       showToast('Exported notes .md');
@@ -754,6 +851,8 @@ const config = window.__SITEDRIFT_CONFIG__;
         showToast('Vault save failed');
       }
     });
+    const localNotesNotice = document.querySelector('.local-notes-notice');
+    if (config.localNotes) localNotesNotice.hidden = false;
 
     divider.addEventListener('pointerdown', (event) => {
       divider.setPointerCapture(event.pointerId);
@@ -854,6 +953,6 @@ const config = window.__SITEDRIFT_CONFIG__;
     autosizeNote();
     setSplit(initialSplit);
     setMode(viewMode);
-    go(params.get('path') || '/');
+    go(params.get('path') || config.initialPath || '/');
     notesPull();
-    setInterval(notesPull, 4000);
+    if (!config.localNotes) setInterval(notesPull, 4000);

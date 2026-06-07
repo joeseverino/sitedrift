@@ -59,6 +59,11 @@ only when the host cannot run MCP.
 5. Re-list notes after code changes. Resolve only findings you verified.
 6. Remove or clear notes only when the user explicitly requests it.
 
+Hosted Cloudflare preview deployments are a different mode: their notes are
+browser-local and intentionally unavailable to MCP. Use browser inspection for
+those URLs. Do not claim that a hosted note was shared with an agent or written
+to the project.
+
 ## MCP tools
 
 - `sitedrift_context`: active targets, viewer URL, and capabilities.
@@ -99,3 +104,9 @@ sitedrift --https
 sitedrift accepts loopback hosts only. The control API uses a random bearer
 token stored in `~/.sitedrift/sessions/<port>.json` with mode `0600`. DEV and
 LIVE render on separate origins. Never expose sitedrift through a public proxy.
+
+The optional Cloudflare Pages addon is intentionally public-preview safe: it is
+installed only on non-production builds, exposes only `/__sitedrift/*`, permits
+only `GET` and `HEAD`, allowlists one configured live origin, and sandboxes both
+frames without same-origin authority. Production output and existing API
+Functions are unchanged.

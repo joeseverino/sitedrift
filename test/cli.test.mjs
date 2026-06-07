@@ -44,3 +44,19 @@ test('parses agent note commands', () => {
     author: undefined,
   });
 });
+
+test('parses the Cloudflare preview command', () => {
+  const parsed = parseCommand([
+    'cloudflare',
+    '--dir', 'build',
+    '--live', 'https://example.test',
+    '--production-branch', 'trunk',
+  ]);
+  assert.deepEqual(parsed.command, {
+    name: 'cloudflare',
+    dir: 'build',
+    live: 'https://example.test',
+    brand: '',
+    productionBranch: 'trunk',
+  });
+});

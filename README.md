@@ -66,6 +66,42 @@ mkcert isn't found it falls back to an `openssl` self-signed cert and prints the
 one command to trust it on your OS. Already have a cert? Skip all of this and
 pass `--cert <file> --key <file>`.
 
+### Cloudflare preview deployments
+
+Turn every non-production Cloudflare Pages deployment into a compact sitedrift
+review URL. The deployment opens its own preview in DEV Solo mode and can switch
+to Split, Overlay, or Diff against the configured production site.
+
+Install sitedrift and run the wrapper after your static build:
+
+```json
+{
+  "scripts": {
+    "build": "astro build && sitedrift cloudflare --dir dist --live https://example.com"
+  },
+  "devDependencies": {
+    "sitedrift": "^0.3.0"
+  }
+}
+```
+
+Add one scoped Pages Function:
+
+```ts
+// functions/__sitedrift/[[path]].ts
+export { onRequest } from 'sitedrift/cloudflare';
+```
+
+That is the entire integration. On Cloudflare Pages, the wrapper activates only
+when `CF_PAGES=1` and `CF_PAGES_BRANCH` is not `main`. Production builds are
+left unchanged. Use `--production-branch <name>` when production is another
+branch.
+
+Hosted proxies are read-only (`GET`/`HEAD`), sandboxed without same-origin
+authority, and fixed to the configured live origin. Review notes stay in that
+browser's `localStorage`; they are not sent to an API, shared with agents, or
+written to disk. Existing application Functions keep their original routes.
+
 ---
 
 ## See the whole review loop
@@ -122,6 +158,9 @@ npm run docs:screenshots
   notes that appear live. Click a note to jump to its route, copy a per-note
   deep link, dock or float the drawer, and **Send to vault** or export Markdown.
 - **No runtime dependencies.** Node standard library only.
+- **Deploy-preview mode for Cloudflare Pages.** Preview branches can carry the
+  compact comparison toolbar without changing production output or application
+  API routes.
 
 ### Keyboard
 

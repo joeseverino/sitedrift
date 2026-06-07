@@ -627,6 +627,9 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
 
   &.open { transform: translateX(0); }
 }
+.review-drawer:has(.local-notes-notice:not([hidden])) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
 .drawer-head {
   display: flex;
   align-items: center;
@@ -637,6 +640,16 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
   & strong { flex: 1; font-size: 14px; }
   & .icon { inline-size: 30px; block-size: 30px; }
   & .icon.active { color: #fff; background: var(--active); border-color: var(--active-line); }
+}
+.local-notes-notice {
+  margin: 12px 16px 0;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--field) 82%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .note-list {
