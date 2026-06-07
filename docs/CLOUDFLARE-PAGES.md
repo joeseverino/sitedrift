@@ -40,6 +40,28 @@ export { onRequest } from 'sitedrift/cloudflare';
 Commit and push a non-production branch. Its Pages URL opens in compact DEV
 Solo view and can switch to Split, Overlay, or Diff against production.
 
+## What the deployment looks like
+
+The integration uses the normal Pages build. Cloudflare records the repository,
+branch, commit, success state, duration, and immutable URL for the reviewed
+artifact:
+
+[![Cloudflare deployment details](images/cloudflare-deployment.jpg)](https://6ef83545.jseverino.pages.dev/)
+
+After the framework creates its static output, sitedrift transforms the preview
+in place. This real build produced 83 HTML files and then printed:
+`sitedrift: wrapped 83 HTML files for Cloudflare preview ...`
+
+![Cloudflare build log showing the sitedrift wrapper](images/cloudflare-build-log.jpg)
+
+The resulting deployment opens directly into sitedrift and compares that
+specific preview with the configured production origin:
+
+[![Wrapped Cloudflare preview in Split view](images/cloudflare-preview-result.jpg)](https://6ef83545.jseverino.pages.dev/)
+
+This demonstration uses an immutable `*.pages.dev` URL, so it remains pinned to
+the reviewed commit even after the branch changes.
+
 ## Production guard
 
 The wrapper activates only when all of these are true:

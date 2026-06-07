@@ -116,6 +116,32 @@ That is two project changes and requires no Cloudflare dashboard settings or
 bindings. See the [complete Cloudflare Pages guide](docs/CLOUDFLARE-PAGES.md)
 for framework examples, the production guard, security details, and a CI check.
 
+### A real Pages deployment
+
+This is the same integration running on
+[`jseverino.com`](https://github.com/joeseverino/jseverino.com). A GitHub branch
+push created an ordinary Cloudflare Pages preview tied to one repository,
+branch, commit, and immutable deployment URL:
+
+[![Cloudflare Pages deployment details for a sitedrift preview](docs/images/cloudflare-deployment.jpg)](https://6ef83545.jseverino.pages.dev/)
+
+The existing Cloudflare build generated 83 static pages, then the installed
+sitedrift dependency wrapped those pages before Cloudflare uploaded the assets
+and scoped Function. There was no separate deployment service or dashboard
+configuration:
+
+![Cloudflare build log showing sitedrift wrapping 83 HTML files](docs/images/cloudflare-build-log.jpg)
+
+Opening that immutable deployment produces the review UI. DEV is a temporary
+red-brand branch generated with
+[`branding-engine`](https://github.com/joeseverino/branding-engine); LIVE is the
+unchanged navy production site:
+
+[![Cloudflare preview comparing red DEV with navy LIVE](docs/images/cloudflare-preview-result.jpg)](https://6ef83545.jseverino.pages.dev/)
+
+The source branch was later restored to navy, while the immutable deployment
+remains a reproducible artifact of the exact reviewed commit.
+
 ---
 
 ## See the whole review loop
@@ -330,6 +356,8 @@ for desktop split, narrow Solo, difference overlay, and the notes drawer.
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internals, invariants, and the
   module map.
+- [`docs/CLOUDFLARE-PAGES.md`](docs/CLOUDFLARE-PAGES.md) — two-step hosted
+  preview setup, production guard, security model, and a real deployment.
 
 ## Credits
 
