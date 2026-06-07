@@ -35,12 +35,20 @@ async function devResponse(context, route) {
   if (context.request.method === 'GET' && accept.includes('text/html')) {
     const clean = pathname.replace(/^\/+/, '');
     const candidates = pathname.endsWith('/')
-      ? [`/__sitedrift/source/${clean}`]
-      : [`/__sitedrift/source/${clean}`, `/__sitedrift/source/${clean}/`];
-    if (pathname === '/') candidates.unshift('/__sitedrift/source/');
+      ? [`/__sitedrift/source/${clean}index.html.txt`]
+      : [`/__sitedrift/source/${clean}.html.txt`, `/__sitedrift/source/${clean}/index.html.txt`];
+    if (pathname === '/') candidates.unshift('/__sitedrift/source/index.html.txt');
     for (const pathname of candidates) {
       const response = await context.env.ASSETS.fetch(new URL(pathname, requestUrl));
-      if (response.ok) return response;
+      if (response.ok) {
+        const headers = new Headers(response.headers);
+        headers.set('content-type', 'text/html; charset=utf-8');
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
     }
   }
   return context.env.ASSETS.fetch(routeUrl);

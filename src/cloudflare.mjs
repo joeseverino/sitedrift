@@ -60,7 +60,7 @@ export function installCloudflarePreview({
 
   for (const file of files) {
     const relative = path.relative(output, file);
-    const preserved = path.join(source, relative);
+    const preserved = path.join(source, `${relative}.txt`);
     fs.mkdirSync(path.dirname(preserved), { recursive: true });
     fs.copyFileSync(file, preserved);
     fs.writeFileSync(file, renderHostedViewer({
