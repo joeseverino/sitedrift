@@ -7,6 +7,5 @@ test('hosted frames allow same-origin styling and deployed interactions', () => 
   const sandbox = source.match(/iframe\.setAttribute\('sandbox', '([^']+)'\)/)?.[1] || '';
   assert.match(sandbox, /\ballow-same-origin\b/);
   assert.match(sandbox, /\ballow-scripts\b/);
-  assert.match(source, /function hostedSnapshot\(side\)/);
-  assert.match(source, /renderMetadata\(side,/);
+  assert.doesNotMatch(source, /function hostedSnapshot\(side\)/);
 });

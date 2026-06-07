@@ -87,70 +87,10 @@
         : config[side] + normalizeRoute(route);
     }
     function framePost(side, type, data = {}) {
-      if (config.hosted) {
-        const win = frame(side).contentWindow;
-        const scrolling = frame(side).contentDocument?.scrollingElement;
-        if (type === 'scroll' && scrolling) scrolling.scrollTop = Number(data.y) || 0;
-        if (type === 'reload') win?.location.reload();
-        return;
-      }
       frame(side).contentWindow?.postMessage(
         { source: 'sitedrift-parent', side, type, ...data },
         config.hosted ? '*' : config.frameOrigins[side],
       );
-    }
-
-    function hostedSnapshot(side) {
-      if (!config.hosted) return;
-      const iframe = frame(side);
-      const doc = iframe.contentDocument;
-      const win = iframe.contentWindow;
-      if (!doc || !win) return;
-      const q = (selector) => doc.querySelector(selector);
-      const images = [...doc.querySelectorAll('img')];
-      const title = (doc.title || '').trim();
-      const description = q('meta[name="description"]')?.content?.trim() || '';
-      const canonical = q('link[rel="canonical"]')?.href || '';
-      const checks = [
-        ['Title present', !!title],
-        ['Title 30–60 chars', title.length >= 30 && title.length <= 60, String(title.length)],
-        ['Meta description', !!description],
-        ['Description 70–160', description.length >= 70 && description.length <= 160, String(description.length)],
-        ['Exactly one H1', doc.querySelectorAll('h1').length === 1, `${doc.querySelectorAll('h1').length} found`],
-        ['Canonical link', !!q('link[rel="canonical"]')],
-        ['Viewport meta', !!q('meta[name="viewport"]')],
-        ['html lang', !!doc.documentElement.lang],
-        ['Open Graph title', !!q('meta[property="og:title"]')],
-        ['Open Graph image', !!q('meta[property="og:image"]')],
-        ['Not noindex', !(q('meta[name="robots"]')?.content || '').toLowerCase().includes('noindex')],
-        ['Favicon', !!q('link[rel~="icon"]')],
-        ['Images have alt', images.every((image) => image.hasAttribute('alt')), `${images.filter((image) => !image.hasAttribute('alt')).length} missing`],
-      ].map(([label, ok, note]) => ({ label, ok, note }));
-      const url = new URL(iframe.src);
-      const route = (url.pathname.slice(proxyPath(side).length) || '/') + url.search + url.hash;
-      renderMetadata(side, {
-        route,
-        meta: {
-          title,
-          description,
-          canonical,
-          heading: q('h1')?.textContent?.trim() || '',
-          siteName: q('meta[property="og:site_name"]')?.content?.trim() || '',
-          icon: q('link[rel~="icon"]')?.href || '',
-          checks,
-        },
-      });
-      fetchStatus(side, route);
-      const reportScroll = () => {
-        const root = doc.scrollingElement || doc.documentElement;
-        frameState[side] = {
-          y: Number(win.scrollY) || 0,
-          max: Math.max(0, root.scrollHeight - win.innerHeight),
-        };
-        syncFrom(side);
-      };
-      win.addEventListener('scroll', reportScroll, { passive: true });
-      reportScroll();
     }
 
     function statusBadges(side) {
@@ -565,12 +505,6 @@
         runFrameKey(message.key, side, message);
       }
     });
-    if (config.hosted) {
-      for (const side of ['dev', 'live']) {
-        frame(side).addEventListener('load', () => hostedSnapshot(side));
-      }
-    }
-
     scrollButton.addEventListener('click', () => {
       syncScroll = !syncScroll;
       scrollButton.classList.toggle('active', syncScroll);
