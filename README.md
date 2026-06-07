@@ -35,6 +35,14 @@ npm i -g sitedrift
 sitedrift /pricing -d http://localhost:4321 -l https://example.com -o
 ```
 
+Bind securely to loopback while using an existing local DNS name and
+certificate:
+
+```bash
+sitedrift / --host 127.0.0.1 --hostname compare.homelab \
+  --cert /path/to/fullchain.pem --key /path/to/compare.homelab.key
+```
+
 For a project you use repeatedly, add `sitedrift.config.json`:
 
 ```json
@@ -197,6 +205,7 @@ Every option is a CLI flag, and also reads a `SITEDRIFT_<NAME>` env var.
 | `-l, --live <url>` | `SITEDRIFT_LIVE` | `https://example.com` | Right-pane (live) origin. |
 | `-p, --port <n>` | `SITEDRIFT_PORT` | `4178` | Listen port. |
 | `--host <addr>` | `SITEDRIFT_HOST` | `127.0.0.1` | Bind address. |
+| `--hostname <name>` | `SITEDRIFT_HOSTNAME` | bind address | Browser-facing local DNS name; the socket remains bound to `--host`. |
 | `-o, --open` | — | off | Open the viewer in your browser. |
 | `--https` | — | off | Serve HTTPS with an auto cert (mkcert if present, else openssl). |
 | `--setup-https` | — | — | One-time: generate + trust a local cert, then exit. |

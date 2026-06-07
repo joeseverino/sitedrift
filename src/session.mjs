@@ -11,7 +11,8 @@ export function sessionFile(port) {
 
 export function createSession(config, scheme) {
   const token = crypto.randomBytes(32).toString('base64url');
-  const host = config.host.includes(':') ? `[${config.host}]` : config.host;
+  const publicHost = config.hostname || config.host;
+  const host = publicHost.includes(':') ? `[${publicHost}]` : publicHost;
   const url = `${scheme}://${host}:${config.port}`;
   const frameUrls = {
     dev: `${scheme}://${host}:${config.port + 1}`,

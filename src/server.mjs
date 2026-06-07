@@ -38,7 +38,7 @@ export function createServer(config, tls, session, { control = true, side: frame
   const handler = async (req, res) => {
     try {
       const hostname = new URL(`http://${req.headers.host}`).hostname.replace(/^\[|\]$/g, '');
-      if (hostname !== config.host) {
+      if (hostname !== config.host && hostname !== config.hostname) {
         send(res, 421, 'misdirected request');
         return;
       }

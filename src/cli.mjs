@@ -6,7 +6,7 @@ import path from 'node:path';
 const ALIASES = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'version' };
 const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version']);
 const VALUE_FLAGS = new Set([
-  'dev', 'live', 'port', 'host', 'cert', 'key', 'notes', 'brand', 'author',
+  'dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author',
   'vault', 'config', 'route', 'side', 'dir', 'production-branch',
 ]);
 const KNOWN_FLAGS = new Set([...BOOLEANS, ...VALUE_FLAGS]);
@@ -61,7 +61,7 @@ function readConfigFile(explicit) {
   if (!value || Array.isArray(value) || typeof value !== 'object') {
     throw new Error(`Config ${file} must contain a JSON object.`);
   }
-  const allowed = new Set(['dev', 'live', 'port', 'host', 'cert', 'key', 'notes', 'brand', 'author', 'vault', 'https', 'open']);
+  const allowed = new Set(['dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author', 'vault', 'https', 'open']);
   const unknown = Object.keys(value).filter((key) => !allowed.has(key));
   if (unknown.length) throw new Error(`Unknown config key${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`);
   return value;
@@ -121,6 +121,7 @@ Options:
   -l, --live <url>    Right-pane (live) origin          [default https://example.com]
   -p, --port <n>      Listen port                       [default 4178]
       --host <addr>   Bind address                      [default 127.0.0.1]
+      --hostname <n>  Browser hostname                  [default bind address]
   -o, --open          Open the viewer in your browser
       --https         Serve HTTPS with an auto cert (mkcert if present, else openssl)
       --setup-https   One-time: generate + trust a local cert, then exit
@@ -155,6 +156,10 @@ export function resolveConfig(argv = process.argv.slice(2)) {
   if (!['127.0.0.1', 'localhost', '::1'].includes(host)) {
     throw new Error('Host must be loopback (127.0.0.1, localhost, or ::1).');
   }
+  const hostname = pick(opts, fileConfig, 'hostname', 'HOSTNAME', host);
+  if (!/^(?:[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?|::1)$/i.test(hostname)) {
+    throw new Error('Hostname must be a valid DNS name or ::1.');
+  }
   return {
     opts,
     help: !!opts.help,
@@ -162,6 +167,7 @@ export function resolveConfig(argv = process.argv.slice(2)) {
     setupHttps: !!opts['setup-https'],
     https: !opts.http && boolean(pick(opts, fileConfig, 'https', 'HTTPS', false), 'https'),
     host,
+    hostname,
     port,
     devBase: cleanBase(pick(opts, fileConfig, 'dev', 'DEV', 'http://127.0.0.1:4321')),
     liveBase: cleanBase(pick(opts, fileConfig, 'live', 'LIVE', 'https://example.com')),

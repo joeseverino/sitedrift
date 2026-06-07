@@ -1,6 +1,6 @@
 {
   "name": "sitedrift",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Catch the drift between dev and live — frame your local site and production side-by-side on the same route, locked scroll, with a difference-blend overlay. Zero runtime dependencies.",
   "type": "module",
   "bin": {

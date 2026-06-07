@@ -46,7 +46,9 @@ several parts look redundant but are load-bearing.
   `viewer.js` are served as their own cacheable routes; `/` returns only the
   shell (~12 KB instead of ~75 KB inline).
 - **It is a loopback development tool**, not a public server. Non-loopback
-  hosts are rejected and Host headers are validated.
+  bind addresses are rejected. An optional browser hostname supports local DNS
+  and TLS names such as `compare.homelab`; Host validation accepts only the
+  loopback bind name and that exact alias.
 
 The `site` CLI wrapper (process lifecycle, TLS cert wiring, the version/health
 handshake §9) is *not* part of the package surface; the bin is self-launching

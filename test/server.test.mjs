@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import { createServer } from '../src/server.mjs';
 
-function request(port, pathname, { token, referer, method = 'GET', body } = {}) {
+function request(port, pathname, { token, referer, hostname, method = 'GET', body } = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: '127.0.0.1',
@@ -15,6 +15,7 @@ function request(port, pathname, { token, referer, method = 'GET', body } = {}) 
       path: pathname,
       method,
       headers: {
+        ...(hostname ? { host: `${hostname}:${port}` } : {}),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(referer ? { referer } : {}),
         ...(body ? { 'content-type': 'application/json' } : {}),
@@ -35,6 +36,7 @@ function fixture() {
   const notesFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sitedrift-server-')), 'notes.json');
   const config = {
     host: '127.0.0.1',
+    hostname: '127.0.0.1',
     port: 4178,
     devBase: new URL('http://127.0.0.1:4321'),
     liveBase: new URL('https://example.com'),
@@ -92,4 +94,17 @@ test('frame listener does not expose viewer or control API', async (t) => {
   assert.equal((await request(port, '/')).status, 404);
   assert.equal((await request(port, '/api/v1/session', { token: session.token })).status, 404);
   assert.equal((await request(port, '/__live/')).status, 404);
+});
+
+test('accepts only the loopback bind name and configured browser hostname', async (t) => {
+  const { config, session } = fixture();
+  config.hostname = 'compare.homelab';
+  const server = createServer(config, null, session);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const port = server.address().port;
+
+  assert.equal((await request(port, '/health')).status, 200);
+  assert.equal((await request(port, '/health', { hostname: 'compare.homelab' })).status, 200);
+  assert.equal((await request(port, '/health', { hostname: 'attacker.example' })).status, 421);
 });
