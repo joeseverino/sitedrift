@@ -10,7 +10,9 @@ test('hosted frames allow same-origin styling and deployed interactions', () => 
   assert.doesNotMatch(source, /function hostedSnapshot\(side\)/);
   assert.match(source, /message\.type === 'dismiss'/);
   assert.match(source, /data-compact-origin/);
-  assert.match(source, /function statusTitle\(side, status\)/);
+  assert.match(source, /function showStatusPopover\(badge\)/);
+  assert.match(source, /function metricDelta\(key\)/);
+  assert.match(source, /hideStatusPopover\(\)/);
   assert.match(source, /site-compare-scroll', !!config\.hosted/);
   assert.match(source, /site-compare-mirror', !!config\.hosted/);
 });

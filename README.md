@@ -74,13 +74,14 @@ to Split, Overlay, or Diff against the configured production site.
 
 Install sitedrift and run the wrapper after your static build:
 
+```bash
+npm install --save-dev sitedrift@latest
+```
+
 ```json
 {
   "scripts": {
     "build": "astro build && sitedrift cloudflare --dir dist --live https://example.com"
-  },
-  "devDependencies": {
-    "sitedrift": "^0.3.0"
   }
 }
 ```
@@ -102,6 +103,10 @@ origin. Frames run the compared site's scripts so interactive previews behave
 like the deployment; only enable the addon for preview code you trust. Review notes stay in that
 browser's `localStorage`; they are not sent to an API, shared with agents, or
 written to disk. Existing application Functions keep their original routes.
+
+That is two project changes and requires no Cloudflare dashboard settings or
+bindings. See the [complete Cloudflare Pages guide](docs/CLOUDFLARE-PAGES.md)
+for framework examples, the production guard, security details, and a CI check.
 
 ---
 
@@ -148,9 +153,10 @@ npm run docs:screenshots
   force-locks scrolling so the panes can't drift. Keys: `O` overlay, `D` diff.
 - **Locked scrolling** with one controller (exact pixel or proportional) — no
   duplicate scrollbars, no bounce. An internal link click mirrors to both panes.
-- **Metadata diff + status** — title / description / canonical compared across
-  sides (`≠ meta`), and a per-pane `200/3xx/4xx/5xx/ERR` badge refreshed on every
-  route load, so a route that 404s on one side jumps out.
+- **Metadata diff + response details** — title / description / canonical
+  compared across sides (`≠ meta`). Each `200/3xx/4xx/5xx/ERR` badge shows the
+  response time on hover; click it for DEV/LIVE response, DOM-ready, load,
+  transfer, headers, and deltas.
 - **SEO panel** — Google-style snippet preview + a ~13-point checklist per pane
   (title/description length, single H1, canonical, viewport, lang, Open Graph,
   noindex, image alt…), with a flag showing how many checks fail.

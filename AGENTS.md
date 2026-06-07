@@ -62,7 +62,9 @@ only when the host cannot run MCP.
 Hosted Cloudflare preview deployments are a different mode: their notes are
 browser-local and intentionally unavailable to MCP. Use browser inspection for
 those URLs. Do not claim that a hosted note was shared with an agent or written
-to the project.
+to the project. Setup is two project changes and is documented in
+`docs/CLOUDFLARE-PAGES.md`; do not instruct users to change Cloudflare dashboard
+settings or bindings.
 
 ## MCP tools
 

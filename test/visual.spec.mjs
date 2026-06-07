@@ -55,4 +55,29 @@ test.describe('visual regression', () => {
     await expect(page.locator('.note-list li')).toHaveCount(2);
     await expect(page).toHaveScreenshot('notes-drawer.png', SCREENSHOT);
   });
+
+  test('response details popover and stable compact controls', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await ready(page);
+
+    const status = page.locator('.label[data-label="dev"] .status-badge');
+    await expect(status).toHaveText('200');
+    await expect(status).toHaveAttribute('data-summary', /^Response \d+ ms$/);
+    await status.click();
+    await expect(page.locator('.status-popover')).toBeVisible();
+    await expect(page.locator('.status-grid')).toContainText('DOM ready');
+    await expect(page.locator('.status-grid')).toContainText('Delta');
+
+    const devFrame = await page.locator('iframe[data-side="dev"]').boundingBox();
+    await page.mouse.click((devFrame?.x || 0) + 80, (devFrame?.y || 0) + 600);
+    await expect(page.locator('.status-popover')).toBeHidden();
+
+    await page.locator('[data-action="compact"]:visible').click();
+    await page.getByRole('button', { name: 'Solo', exact: true }).click();
+    const controls = page.locator('.compact-controls');
+    const before = await controls.boundingBox();
+    await page.locator('[data-compact-title="dev"]').click();
+    const after = await controls.boundingBox();
+    expect(after?.x).toBe(before?.x);
+  });
 });

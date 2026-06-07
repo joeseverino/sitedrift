@@ -11,6 +11,8 @@ export function frameBridge(side, prefix = `/__${side}`) {
       const title=(document.title||'').trim();
       const description=q('meta[name="description"]')?.content?.trim()||'';
       const canonical=q('link[rel="canonical"]')?.href||'';
+      const icons=[...document.querySelectorAll('link[rel~="icon"]')];
+      const icon=(icons.find((item)=>(item.type||'').toLowerCase()==='image/svg+xml'||/\\.svg(?:$|[?#])/i.test(item.href))||icons[0])?.href||'';
       const navigation=performance.getEntriesByType('navigation')[0];
       const timing=navigation?{
         response:Math.round(navigation.responseEnd),
@@ -27,11 +29,11 @@ export function frameBridge(side, prefix = `/__${side}`) {
         ['html lang',!!document.documentElement.lang],['Open Graph title',!!q('meta[property="og:title"]')],
         ['Open Graph image',!!q('meta[property="og:image"]')],
         ['Not noindex',!(q('meta[name="robots"]')?.content||'').toLowerCase().includes('noindex')],
-        ['Favicon',!!q('link[rel~="icon"]')],
+        ['Favicon',!!icon],
         ['Images have alt',imgs.every((img)=>img.hasAttribute('alt')),imgs.filter((img)=>!img.hasAttribute('alt')).length+' missing']
       ].map(([label,ok,note])=>({label,ok,note}));
       send('ready',{route:route(),meta:{title,description,canonical,heading:q('h1')?.textContent?.trim()||'',
-        siteName:q('meta[property="og:site_name"]')?.content?.trim()||'',icon:q('link[rel~="icon"]')?.href||'',checks,timing}});
+        siteName:q('meta[property="og:site_name"]')?.content?.trim()||'',icon,checks,timing}});
       send('scroll',{y:scrollY,max:Math.max(0,root().scrollHeight-innerHeight)});
     };
     addEventListener('message',(event)=>{

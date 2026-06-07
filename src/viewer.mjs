@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 // Bumped when the viewer assets change; busts the ?v= cache and reported in
 // /health so the `site compare` wrapper knows when to restart the server.
-export const VIEWER_VERSION = 30;
+export const VIEWER_VERSION = 31;
 
 function readAsset(path) {
   try {

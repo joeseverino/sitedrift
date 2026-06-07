@@ -24,6 +24,7 @@
     const noteList = document.querySelector('.note-list');
     const noteInput = document.querySelector('.note-compose textarea');
     const toast = document.querySelector('.toast');
+    const statusPopover = document.querySelector('.status-popover');
     const params = new URLSearchParams(location.search);
     const suppressScrollUntil = { dev: 0, live: 0 };
     const scrollFrames = { dev: 0, live: 0 };
@@ -87,6 +88,23 @@
         ? location.origin + proxyPath(side) + normalizeRoute(route)
         : config[side] + normalizeRoute(route);
     }
+    function setFavicon(image, side, declared = '') {
+      const base = config.frameOrigins[side] + proxyPath(side);
+      const appIcon = config.hosted ? '/__sitedrift/assets/icon.svg' : '/icon.svg';
+      const candidates = [...new Set([
+        declared,
+        `${base}/favicon.svg`,
+        `${base}/favicon.ico`,
+        appIcon,
+      ].filter(Boolean))];
+      let index = 0;
+      image.onerror = () => {
+        index++;
+        if (index < candidates.length) image.src = candidates[index];
+        else image.onerror = null;
+      };
+      image.src = candidates[0];
+    }
     function framePost(side, type, data = {}) {
       frame(side).contentWindow?.postMessage(
         { source: 'sitedrift-parent', side, type, ...data },
@@ -112,21 +130,102 @@
       return `${(value / 1024 / 1024).toFixed(1)} MB`;
     }
 
-    function statusTitle(side, status) {
+    function statusSummary(side) {
       const detail = statusDetails[side];
-      const lines = [`${side.toUpperCase()} returned ${status || 'an error'}`];
-      if (detail.requestMs) lines.push(`Status check: ${formatMs(detail.requestMs)}`);
-      if (detail.response) lines.push(`Document response: ${formatMs(detail.response)}`);
-      if (detail.dom) lines.push(`DOM ready: ${formatMs(detail.dom)}`);
-      if (detail.load) lines.push(`Window load: ${formatMs(detail.load)}`);
-      const size = formatBytes(detail.transfer || detail.decoded);
-      if (size) lines.push(`${detail.transfer ? 'Transferred' : 'Decoded size'}: ${size}`);
-      if (detail.type) lines.push(`Content-Type: ${detail.type}`);
-      if (detail.cache) lines.push(`Cache-Control: ${detail.cache}`);
-      return lines.join('\n');
+      if (detail.response) return `Response ${formatMs(detail.response)}`;
+      if (detail.requestMs) return `Status check ${formatMs(detail.requestMs)}`;
+      return 'Click for response details';
+    }
+
+    function metricValue(side, key) {
+      const detail = statusDetails[side];
+      if (key === 'status') return detail.status ? String(detail.status) : 'ERR';
+      if (key === 'size') return formatBytes(detail.transfer || detail.decoded) || '-';
+      return formatMs(detail[key]) || '-';
+    }
+
+    function metricDelta(key) {
+      if (key === 'status') return { text: '-', className: '' };
+      const dev = key === 'size'
+        ? statusDetails.dev.transfer || statusDetails.dev.decoded
+        : statusDetails.dev[key];
+      const live = key === 'size'
+        ? statusDetails.live.transfer || statusDetails.live.decoded
+        : statusDetails.live[key];
+      if (!Number.isFinite(dev) || !Number.isFinite(live)) return { text: '-', className: '' };
+      const delta = dev - live;
+      const value = key === 'size' ? formatBytes(Math.abs(delta)) : formatMs(Math.abs(delta));
+      if (!delta) return { text: 'same', className: '' };
+      return {
+        text: `${delta > 0 ? '+' : '-'}${value}`,
+        className: delta > 0 ? 'delta-slower' : 'delta-faster',
+      };
+    }
+
+    function renderStatusPopover() {
+      const rows = [
+        ['HTTP status', 'status'],
+        ['Response', 'response'],
+        ['DOM ready', 'dom'],
+        ['Window load', 'load'],
+        ['Transfer', 'size'],
+      ];
+      const grid = element('div', 'status-grid');
+      for (const value of ['Metric', 'DEV', 'LIVE', 'Delta']) {
+        grid.append(element('div', 'status-cell', value));
+      }
+      for (const [label, key] of rows) {
+        const delta = metricDelta(key);
+        grid.append(
+          element('div', 'status-cell', label),
+          element('div', 'status-cell', metricValue('dev', key)),
+          element('div', 'status-cell', metricValue('live', key)),
+          element('div', `status-cell ${delta.className}`.trim(), delta.text),
+        );
+      }
+      const foot = element('dl', 'status-popover-foot');
+      const dev = statusDetails.dev;
+      const live = statusDetails.live;
+      foot.append(
+        element('dt', '', 'DEV'),
+        element('dd', '', [dev.type, dev.cache].filter(Boolean).join(' · ') || 'No response headers'),
+        element('dt', '', 'LIVE'),
+        element('dd', '', [live.type, live.cache].filter(Boolean).join(' · ') || 'No response headers'),
+      );
+      const head = element('div', 'status-popover-head');
+      head.append(
+        element('strong', '', 'Response details'),
+        element('span', 'status-popover-route', routeInput.value || '/'),
+      );
+      statusPopover.replaceChildren(head, grid, foot);
+    }
+
+    function hideStatusPopover() {
+      statusPopover.hidden = true;
+      for (const badge of document.querySelectorAll('.status-badge[aria-expanded="true"]')) {
+        badge.setAttribute('aria-expanded', 'false');
+      }
+    }
+
+    function showStatusPopover(badge) {
+      renderStatusPopover();
+      statusPopover.hidden = false;
+      for (const item of document.querySelectorAll('.status-badge')) {
+        item.setAttribute('aria-expanded', item === badge ? 'true' : 'false');
+      }
+      const anchor = badge.getBoundingClientRect();
+      const popover = statusPopover.getBoundingClientRect();
+      const left = Math.max(8, Math.min(innerWidth - popover.width - 8, anchor.right - popover.width));
+      const below = anchor.bottom + 8;
+      const top = below + popover.height <= innerHeight - 8
+        ? below
+        : Math.max(8, anchor.top - popover.height - 8);
+      statusPopover.style.left = `${left}px`;
+      statusPopover.style.top = `${top}px`;
     }
 
     function setStatusBadge(side, status) {
+      statusDetails[side].status = status;
       const cls = status >= 200 && status < 300 ? 'status-ok'
         : status >= 300 && status < 400 ? 'status-warn'
         : 'status-err';
@@ -134,18 +233,24 @@
       for (const badge of statusBadges(side)) {
         badge.className = 'status-badge show ' + cls;
         badge.textContent = text;
-        badge.title = statusTitle(side, status);
-        badge.setAttribute('aria-label', badge.title.replaceAll('\n', '. '));
+        badge.dataset.summary = statusSummary(side);
+        badge.setAttribute('aria-label', `${side.toUpperCase()} returned ${text}. ${statusSummary(side)}. Click for DEV and LIVE details.`);
+        badge.setAttribute('aria-haspopup', 'dialog');
+        badge.setAttribute('aria-expanded', 'false');
       }
+      if (!statusPopover.hidden) renderStatusPopover();
     }
 
     function clearStatusBadge(side) {
       for (const badge of statusBadges(side)) {
         badge.className = 'status-badge';
         badge.textContent = '';
-        badge.removeAttribute('title');
+        badge.removeAttribute('data-summary');
         badge.removeAttribute('aria-label');
+        badge.removeAttribute('aria-haspopup');
+        badge.removeAttribute('aria-expanded');
       }
+      hideStatusPopover();
     }
 
     function fetchStatus(side, route) {
@@ -274,7 +379,6 @@
       const siteName = source.siteName
         || config.brand
         || new URL(direct(side, route)).hostname;
-      const faviconSrc = source.icon || (config.frameOrigins[side] + proxyPath(side) + '/favicon.ico');
       let canonicalPath = canonical;
       try { canonicalPath = new URL(canonical).pathname; } catch {}
       meta[side] = { title, description, canonicalPath, heading };
@@ -290,20 +394,15 @@
       compactOrigin.title = config[side] + route;
       label.querySelector('.origin').textContent = config[side] + route;
       const fav = label.querySelector('.favicon');
-      fav.onerror = () => { fav.onerror = null; fav.src = '/icon.svg'; };
-      fav.src = faviconSrc;
+      setFavicon(fav, side, source.icon);
       const compactFav = document.querySelector('[data-compact-favicon="' + side + '"]');
-      compactFav.onerror = () => {
-        compactFav.onerror = null;
-        compactFav.src = config.hosted ? '/__sitedrift/assets/icon.svg' : '/icon.svg';
-      };
-      compactFav.src = faviconSrc;
+      setFavicon(compactFav, side, source.icon);
       label.querySelector('.open-side').href = direct(side, route);
       const card = label.querySelector('.seo-card');
       const sourceRow = element('div', 'seo-source');
       const seoFavicon = element('img', 'seo-favicon');
       seoFavicon.alt = '';
-      seoFavicon.src = faviconSrc;
+      setFavicon(seoFavicon, side, source.icon);
       const sourceText = element('div');
       sourceText.append(
         element('div', 'seo-site', siteName),
@@ -328,8 +427,6 @@
         seoDescription,
         seoChecks(source.checks || []),
       );
-      const seoFav = label.querySelector('.seo-favicon');
-      if (seoFav) seoFav.onerror = () => { seoFav.onerror = null; seoFav.src = '/icon.svg'; };
       const fails = (source.checks || []).filter((check) => !check.ok).length;
       const flag = label.querySelector('.seo-flag');
       if (flag) {
@@ -402,7 +499,7 @@
           new URL(config[side]).host + route;
         document.querySelector('[data-compact-favicon="' + side + '"]').removeAttribute('src');
         label.querySelector('.origin').textContent = config[side] + route;
-        label.querySelector('.favicon').src = '/__' + side + '/favicon.ico';
+        setFavicon(label.querySelector('.favicon'), side);
         label.querySelector('.open-side').href = direct(side, route);
         meta[side] = null;
         statusDetails[side] = {};
@@ -565,6 +662,7 @@
 
     function closePopovers() {
       for (const details of document.querySelectorAll('details[open]')) details.removeAttribute('open');
+      hideStatusPopover();
     }
     scrollButton.addEventListener('click', () => {
       syncScroll = !syncScroll;
@@ -662,6 +760,14 @@
         focusSide = identity.dataset.compactSide === 'dev' ? 'live' : 'dev';
         app.dataset.focus = focusSide;
         renderModes();
+      });
+    }
+    for (const badge of document.querySelectorAll('.status-badge')) {
+      badge.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const wasOpen = !statusPopover.hidden && badge.getAttribute('aria-expanded') === 'true';
+        if (wasOpen) hideStatusPopover();
+        else showStatusPopover(badge);
       });
     }
     for (const slider of overlaySliders) slider.addEventListener('input', () => {
@@ -842,6 +948,10 @@
     addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;
       let handled = false;
+      if (!statusPopover.hidden) {
+        hideStatusPopover();
+        handled = true;
+      }
       for (const details of document.querySelectorAll('details[open]')) {
         details.removeAttribute('open');
         handled = true;
@@ -978,6 +1088,9 @@
         if (!details.contains(event.target)) details.removeAttribute('open');
       }
       if (googleOpen() && !event.target.closest('.label')) setGoogleOpen(false);
+      if (!statusPopover.hidden && !event.target.closest('.status-popover') && !event.target.closest('.status-badge')) {
+        hideStatusPopover();
+      }
       if (notesOpen && !dockMode && !event.target.closest('.review-drawer') && !event.target.closest('[data-action="notes"]')) {
         setNotesOpen(false);
       }
@@ -990,6 +1103,7 @@
       getSelection()?.removeAllRanges();
     });
     addEventListener('resize', () => {
+      hideStatusPopover();
       for (const details of document.querySelectorAll('.label details[open]')) positionSeoCard(details);
     });
     routeInput.addEventListener('keydown', (event) => {
