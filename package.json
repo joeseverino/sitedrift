@@ -4,7 +4,7 @@
   "description": "Catch the drift between dev and live — frame your local site and production side-by-side on the same route, locked scroll, with a difference-blend overlay. Zero dependencies.",
   "type": "module",
   "bin": {
-    "sitedrift": "./sitedrift.mjs"
+    "sitedrift": "sitedrift.mjs"
   },
   "files": [
     "sitedrift.mjs",
