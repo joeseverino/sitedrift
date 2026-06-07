@@ -35,9 +35,9 @@ async function devResponse(context, route) {
   if (context.request.method === 'GET' && accept.includes('text/html')) {
     const clean = pathname.replace(/^\/+/, '');
     const candidates = pathname.endsWith('/')
-      ? [`/__sitedrift/source/${clean}index.html`]
-      : [`/__sitedrift/source/${clean}.html`, `/__sitedrift/source/${clean}/index.html`];
-    if (pathname === '/') candidates.unshift('/__sitedrift/source/index.html');
+      ? [`/__sitedrift/source/${clean}`]
+      : [`/__sitedrift/source/${clean}`, `/__sitedrift/source/${clean}/`];
+    if (pathname === '/') candidates.unshift('/__sitedrift/source/');
     for (const pathname of candidates) {
       const response = await context.env.ASSETS.fetch(new URL(pathname, requestUrl));
       if (response.ok) return response;
@@ -64,6 +64,9 @@ async function liveResponse(context, route, live) {
 
 export async function onRequest(context) {
   const requestUrl = new URL(context.request.url);
+  if (requestUrl.pathname.startsWith('/__sitedrift/source')) {
+    return new Response('Not found.', { status: 404 });
+  }
   const match = requestUrl.pathname.match(/^\/__sitedrift\/(dev|live)(\/.*)?$/);
   if (!match) return context.env.ASSETS.fetch(context.request);
   if (!['GET', 'HEAD'].includes(context.request.method)) {

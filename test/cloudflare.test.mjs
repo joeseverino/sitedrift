@@ -50,7 +50,7 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
     ['/__sitedrift/config.json', new Response(JSON.stringify({ live: 'https://example.com' }), {
       headers: { 'content-type': 'application/json' },
     })],
-    ['/__sitedrift/source/index.html', new Response(
+    ['/__sitedrift/source/', new Response(
       '<!doctype html><head></head><body><img src="/image.png"><h1>Preview</h1></body>',
       { headers: { 'content-type': 'text/html', 'x-frame-options': 'DENY' } },
     )],
@@ -87,4 +87,12 @@ test('the edge runtime is read-only', async () => {
   });
   assert.equal(response.status, 405);
   assert.equal(response.headers.get('allow'), 'GET, HEAD');
+});
+
+test('the preserved source namespace is not publicly readable', async () => {
+  const response = await onRequest({
+    request: new Request('https://preview.example/__sitedrift/source/'),
+    env: { ASSETS: { fetch() { throw new Error('must not fetch'); } } },
+  });
+  assert.equal(response.status, 404);
 });
