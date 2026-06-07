@@ -37,15 +37,19 @@ things that light up are the pixels that actually changed.
 
 ## What it does
 
-- **Split / Solo / Overlay / Mobile** layouts; draggable divider; reload-free swap.
-- **Overlay → Diff** (`mix-blend-mode: difference`): identical pixels render
-  black, changed regions glow. A top-level toolbar toggle (`O` overlay, `D` diff).
+- **One view switch** — Split (divider) · Solo (one pane, Swap flips) · Overlay
+  (stacked). In Overlay an opacity slider blends the panes and **Diff**
+  (`mix-blend-mode: difference`) lights up only the changed pixels. Overlay
+  force-locks scrolling so the panes can't drift. Keys: `O` overlay, `D` diff.
 - **Locked scrolling** with one controller (exact pixel or proportional).
-- **Metadata diff** — title / description / canonical compared across sides,
-  with a `≠ meta` flag and per-pane HTTP status badges.
-- **Review notes as a shared channel** — author-tagged, route/side-aware notes
-  persisted to a JSON file the viewer polls, so a teammate or an AI session can
-  leave notes that appear live. Exportable as Markdown.
+- **Metadata diff + status** — title / description / canonical compared across
+  sides (`≠ meta`), and per-pane `200/3xx/4xx/5xx` badges.
+- **SEO panel** — Google-style snippet preview + a ~13-point checklist per pane,
+  with a flag showing how many checks fail.
+- **Review notes as a shared channel** — author/route/side-tagged notes in a JSON
+  file the viewer polls, so a teammate or an AI session leaves notes that appear
+  live. Click a note to jump to its route, copy a per-note link, dock or float
+  the drawer, and **Send to vault** or export Markdown.
 - **No dependencies.** Node stdlib only — the thing that makes extraction cheap.
 
 ## Planned (on extraction)

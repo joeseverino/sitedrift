@@ -1,7 +1,7 @@
-# Site Compare — Architecture
+# sitedrift — Architecture
 
-Technical companion to the [README](./site-compare.README.md). This documents
-the internals of `site-compare.mjs`, the non-obvious decisions, the invariants
+Technical companion to the [README](./sitedrift.README.md). This documents
+the internals of `sitedrift.mjs`, the non-obvious decisions, the invariants
 that must hold, and a concrete **extraction map** for splitting the single file
 into an npm package.
 
@@ -24,7 +24,7 @@ several parts look redundant but are load-bearing.
 
 Two artifacts ship alongside the module:
 
-- `site-compare-icon.svg` — read at startup, served at `/icon.svg`, used as the
+- `sitedrift-icon.svg` — read at startup, served at `/icon.svg`, used as the
   favicon and toolbar mark.
 - The `site` CLI wrapper — process lifecycle, TLS cert wiring, and the
   version/health handshake (§9). The CLI is *not* part of the package surface;
@@ -46,8 +46,9 @@ otherwise            →  http.createServer()
 | Match | Handler |
 |---|---|
 | `/health` | JSON `{ dev, live, version }` — the handshake source (§9). |
-| `/notes` | `GET` returns the list; `POST` applies one op (§8). |
+| `/notes` | `GET` returns the list; `POST` (JSON only) applies one op (§8). |
 | `/notes.md` | Markdown render of the list. |
+| `/notes/save` | `POST` writes the markdown into `SITE_COMPARE_VAULT` (§8.4). |
 | `/icon.svg` | The startup-loaded SVG, cached 1 day. |
 | `/__dev/*` | `proxy(req, res, 'dev', url)` (§3). |
 | `/__live/*` | `proxy(req, res, 'live', url)` (§3). |
@@ -163,7 +164,7 @@ loops between the two `scroll` event streams.
   document/body (`attachFrameBehavior`) so programmatic jumps are instant — smooth
   scrolling would desync the panes.
 
-### 5.2 Two modes
+### 5.2 Two modes (and the overlay override)
 
 - **`exact`** — both panes share the same pixel `scrollTop`, clamped to the
   *smaller* scrollable range (`alignSide` / `setLinkedScroll`). Best for
@@ -171,6 +172,15 @@ loops between the two `scroll` event streams.
 - **`ratio`** — map source scroll fraction onto the target's range. Uses
   `requestAnimationFrame` plus settle timers (80ms, 240ms) to re-align after the
   target's layout stabilizes (lazy images, late fonts).
+
+**Overlay forces locking.** Two `let`-free helpers gate the whole subsystem:
+`linked()` = `syncScroll || stacked()` and `effScrollMode()` = `stacked() ?
+'exact' : scrollMode`, where `stacked()` is `viewMode === 'overlay'`. Every
+`syncScroll`/`scrollMode` check in the wheel, keydown, `syncFrom`, and
+`applyScrollPresentation` paths goes through these — so Overlay/Diff always
+pixel-lock and hide scrollbars regardless of the user's toggle (an unlocked
+overlay is illegible). The user's `syncScroll` preference is read, never
+mutated, by entering overlay.
 
 ### 5.3 Input interception
 
@@ -205,12 +215,17 @@ URL query param   >   localStorage   >   built-in default
 
 - **URL query** — shareable, reproduces a view. Mirrored via `setUrlParam` /
   `saveBool` (which also write localStorage). Carries: `path`, `split`, `swap`,
-  `mode`, `compact`, `scroll`, `scrollMode`, `mirror`, `solo`, `focus`,
-  `overlay`, `overlayAmount`, `notes`.
-- **localStorage** — per-machine stickiness across sessions for the same keys.
-- **In-memory** — the live `let` flags (`syncScroll`, `soloMode`, `overlayMode`,
-  …). The toggle handlers are the single writers; they update memory, persist
-  (URL+storage), then call a `render*` function.
+  `view`, `overlayBlend`, `overlayAmount`, `mode` (mobile), `compact`, `scroll`,
+  `scrollMode`, `mirror`, `focus`, `dock`, `notes`.
+- **localStorage** — per-machine stickiness across sessions for the same keys
+  (still prefixed `site-compare-*` to preserve existing prefs across the rename).
+- **In-memory** — the live `let` flags. The layout is **one** value,
+  `viewMode ∈ {split, solo, overlay}`, set by `setMode()`; `overlayBlend ∈
+  {opacity, difference}` is the Overlay sub-state (Diff). `dockMode`, `mobileMode`,
+  `syncScroll`, `scrollMode`, `mirrorLinks`, `focusSide` are orthogonal. The
+  handlers are the single writers: mutate memory → persist (URL+storage) → call a
+  `render*`. *(Back-compat: a legacy `view=diff` or `overlay=1&overlayBlend=
+  difference` URL resolves to `overlay` + `difference` at init.)*
 
 > **Invariant:** state lives in exactly one place per concern. The DOM reflects
 > state; it is not the source of truth. A handler's order is always
@@ -253,7 +268,7 @@ clobbering, live propagation.
 
 ### 8.1 File as source of truth
 
-`$SITE_COMPARE_NOTES` (default `$TMPDIR/site-compare-notes.json`). The server
+`$SITE_COMPARE_NOTES` (default `$TMPDIR/sitedrift-notes.json`). The server
 `loadNotes()` reads it **fresh on every request** — so a direct file edit and a
 server-applied op compose without the server holding stale state.
 
@@ -268,7 +283,9 @@ server-applied op compose without the server holding stale state.
 > compose. Keep it this way.
 
 Note schema: `{ id, text, author, route, side, done, ts }`. `id` is
-time+random; `route`/`side` make a note point at a specific page/pane.
+time+random; `route`/`side` make a note point at a specific page/pane — which is
+also what makes a rendered note **clickable** (`go(note.route)` + focus) and
+**copyable** as a deep link.
 
 ### 8.3 Live propagation
 
@@ -280,6 +297,24 @@ feedback; the poll reconciles everyone else's writes.
 
 > **Footgun:** do not move notes into URL/localStorage "for consistency" with §6.
 > The file *is* the channel; that's the whole feature.
+
+### 8.4 Durable export — `POST /notes/save`
+
+The channel file is ephemeral (`$TMPDIR`). When `SITE_COMPARE_VAULT` is set, the
+server exposes `POST /notes/save`, which writes `notesMarkdown(loadNotes())` to a
+dated `sitedrift-review-<timestamp>.md` in that dir and returns `{ ok, path }`.
+The viewer only shows the **Send to vault** button when `config.vault` is true.
+This is the loop-closer for a solo operator: review → durable record where
+decisions already live, without the notes file having to be durable itself.
+
+### 8.5 Drawer presentation
+
+Independent of the channel: the drawer can **dock** (adds `.app.drawer-dock`,
+which insets the whole app via `padding-right: var(--drawer)` so the panes stay
+visible and the toolbar's route box absorbs the lost width) or **float**
+(overlay; closes on outside click). The compose box auto-grows to content up to
+~60vh then scrolls, with a top grip that raises a manual height floor
+(`autosizeNote`). Dock state (`dockMode`) suppresses click-out-to-close.
 
 ---
 
@@ -308,7 +343,7 @@ boundaries below are already clean (each communicates through small, explicit
 interfaces), so extraction is mechanical rather than a rewrite.
 
 ```
-site-compare/
+sitedrift/
   src/
     config.js          // env parsing, cleanBase, startup icon load
     proxy.js           // targetFor, rewriteRootPaths, proxy(), header strip set
@@ -376,8 +411,15 @@ A triage list from an audit pass. **Problems** are arguably-wrong or fragile
 defects. Severity: 🔴 high · 🟠 medium · 🟡 low · 💡 idea.
 
 > **Update — resolved:** **P1–P8 are fixed** and **I1 (difference-blend overlay)
-> is implemented** as of this revision. They're kept below as a record of the
-> reasoning and the fix applied. **I2–I10 remain open.**
+> is implemented**. They're kept below as a record of the reasoning and fix.
+> **I2–I10 remain open** *(note I9 is partly addressed — the CLI prints the notes
+> path, the viewer still doesn't).*
+>
+> **Shipped since this audit** (not in the list below): the unified
+> Split/Solo/Overlay view switch with Diff as the overlay blend; forced
+> scroll-lock in overlay (§5.2); the per-pane **SEO** checklist + flag; clickable
+> /copyable notes (§8.2); the dock/float drawer (§8.5); and **Send to vault**
+> (§8.4). These superseded several rough edges the audit would otherwise list.
 
 ### Problems (resolved)
 
