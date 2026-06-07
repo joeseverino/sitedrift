@@ -16,7 +16,11 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node sitedrift.mjs"
+    "start": "node sitedrift.mjs",
+    "test": "node --check sitedrift.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "keywords": [
     "dev-tool",
