@@ -1,7 +1,7 @@
 export function frameBridge(side, prefix = `/__${side}`) {
   const script = `(() => {
     const side=${JSON.stringify(side)},prefix=${JSON.stringify(prefix)};
-    let linked=false,mirror=false;
+    let linked=false,mirror=false,stacked=false;
     const send=(type,data={})=>parent.postMessage({source:'sitedrift-frame',side,type,...data},'*');
     const root=()=>document.scrollingElement||document.documentElement;
     const route=()=>location.pathname.replace(prefix,'')+location.search+location.hash||'/';
@@ -39,12 +39,15 @@ export function frameBridge(side, prefix = `/__${side}`) {
     addEventListener('message',(event)=>{
       const msg=event.data||{};
       if(msg.source!=='sitedrift-parent'||msg.side!==side)return;
-      if(msg.type==='settings'){linked=!!msg.linked;mirror=!!msg.mirror;document.documentElement.style.scrollBehavior='auto';}
+      if(msg.type==='settings'){linked=!!msg.linked;mirror=!!msg.mirror;stacked=!!msg.stacked;document.documentElement.style.scrollBehavior='auto';}
       if(msg.type==='scroll'){root().scrollTop=msg.y;}
       if(msg.type==='reload')location.reload();
     });
     addEventListener('scroll',()=>send('scroll',{y:scrollY,max:Math.max(0,root().scrollHeight-innerHeight)}),{passive:true});
-    addEventListener('wheel',(event)=>{if(!linked||!event.deltaY)return;event.preventDefault();send('wheel',{delta:event.deltaY,mode:event.deltaMode,height:innerHeight,y:scrollY});},{passive:false,capture:true});
+    // Only hijack the wheel when the panes are stacked (Overlay), where pixel-exact
+    // lockstep is required and there is no per-pane native scroll to mirror. Side-by-side
+    // views scroll natively (preserving momentum) and mirror via the scroll listener.
+    addEventListener('wheel',(event)=>{if(!linked||!stacked||!event.deltaY)return;event.preventDefault();send('wheel',{delta:event.deltaY,mode:event.deltaMode,height:innerHeight,y:scrollY});},{passive:false,capture:true});
     addEventListener('keydown',(event)=>{
       const typing=/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)||event.target.isContentEditable;
       if(!typing&&!event.metaKey&&!event.ctrlKey&&!event.altKey&&['r','s','0','/','o','d'].includes(event.key.toLowerCase())){

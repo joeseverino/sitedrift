@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { installCloudflarePreview } from '../src/cloudflare.mjs';
+import { installCloudflarePreview, scaffoldCloudflarePreview } from '../src/cloudflare.mjs';
 import { onRequest } from '../src/cloudflare-runtime.mjs';
 
 function fixture() {
@@ -80,6 +80,30 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
   assert.match(body, /transferSize/);
   assert.match(body, /image\/svg\+xml/);
   assert.match(body, /\\.svg/);
+});
+
+test('scaffolds the scoped Function file and is idempotent', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sitedrift-init-'));
+  const first = scaffoldCloudflarePreview({ cwd, live: 'https://example.com' });
+  assert.equal(first.created, true);
+  assert.equal(first.functionFile, path.join('functions', '__sitedrift', '[[path]].ts'));
+  assert.equal(
+    fs.readFileSync(path.join(cwd, first.functionFile), 'utf8'),
+    "export { onRequest } from 'sitedrift/cloudflare';\n",
+  );
+  assert.match(first.buildLine, /--live https:\/\/example\.com/);
+
+  const second = scaffoldCloudflarePreview({ cwd, live: 'https://example.com' });
+  assert.equal(second.created, false);
+});
+
+test('init writes a .js Function and detects the output dir', () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sitedrift-init-'));
+  fs.mkdirSync(path.join(cwd, '_site'));
+  const result = scaffoldCloudflarePreview({ cwd, js: true });
+  assert.equal(result.functionFile, path.join('functions', '__sitedrift', '[[path]].js'));
+  assert.equal(result.outDir, '_site');
+  assert.match(result.buildLine, /--dir _site/);
 });
 
 test('the edge runtime is read-only', async () => {

@@ -1,9 +1,8 @@
 # sitedrift — Architecture
 
-Technical companion to the [README](./sitedrift.README.md). This documents
-the internals of `sitedrift.mjs`, the non-obvious decisions, the invariants
-that must hold, and a concrete **extraction map** for splitting the single file
-into an npm package.
+Technical companion to the [README](../README.md). This documents the internals
+of the packaged application, the non-obvious decisions, and the invariants that
+must hold.
 
 Audience: anyone modifying the proxy, the scroll controller, or the notes
 channel. Read the relevant invariants before you "simplify" anything here —
@@ -14,7 +13,7 @@ several parts look redundant but are load-bearing.
 ## 1. Shape and constraints
 
 - **Zero runtime dependencies, no build step.** Only Node stdlib (`http`,
-  `https`, `fs`, `os`, `child_process`, `url`, global `fetch`). This is a hard
+  `https`, `fs`, `os`, `child_process`, `url`, `crypto`). This is a hard
   design constraint — do not add dependencies without a deliberate decision to
   give that up. There is no bundler: the source ships as-is and `npx sitedrift`
   runs it directly.
@@ -33,7 +32,7 @@ several parts look redundant but are load-bearing.
   | `src/session.mjs` | private session token + discovery file lifecycle. |
   | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
   | `src/tls.mjs` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
-  | `src/cloudflare.mjs` | preview-only static-build wrapper. |
+  | `src/cloudflare.mjs` | preview-only static-build wrapper + `init` scaffold (auto-detects the output dir). |
   | `src/cloudflare-runtime.mjs` | read-only scoped Pages Function proxy. |
   | `src/frame-content.mjs` | shared URL rewriting and frame bridge injection. |
   | `src/http.mjs` | `send` / `readBody` helpers. |
@@ -41,10 +40,12 @@ several parts look redundant but are load-bearing.
   | `assets/viewer.{html,css,js}` | the viewer — edited as real HTML/CSS/JS. |
   | `assets/icon.svg` | served at `/icon.svg`, favicon + toolbar mark. |
 
-  The viewer is static except a single `config` object (`dev`, `live`, `brand`,
-  `author`, `vault`) injected as `window.__SITEDRIFT_CONFIG__`. `viewer.css` and
-  `viewer.js` are served as their own cacheable routes; `/` returns only the
-  shell (~12 KB instead of ~75 KB inline).
+  The viewer is static except a single `config` object injected as
+  `window.__SITEDRIFT_CONFIG__`. Local mode includes DEV/LIVE, brand/author,
+  vault availability, API/token, isolated frame origins, and `hosted: false`;
+  hosted mode replaces the control-plane fields with local-notes and initial
+  route state. `viewer.css` and `viewer.js` are served as their own cacheable
+  routes; `/` returns only the shell (~13 KB instead of the full inline app).
 - **It is a loopback development tool**, not a public server. Non-loopback
   bind addresses are rejected. An optional browser hostname supports local DNS
   and TLS names such as `compare.homelab`; Host validation accepts only the
@@ -78,7 +79,7 @@ otherwise            →  http.createServer()
 |---|---|
 | `/health` | JSON `{ dev, live, version }` — the handshake source (§9). |
 | `/api/v1/session` | Authenticated machine context and capabilities. |
-| `/api/v1/notes` | Authenticated note list / operation endpoint (§8). |
+| `/api/v1/notes` | Authenticated note list/revision and operation endpoint (§8). |
 | `/notes.md` | Markdown render of the list. |
 | `/api/v1/notes/save` | Authenticated durable export (§8.4). |
 | `/icon.svg` | The startup-loaded SVG, cached 1 day. |
@@ -139,8 +140,8 @@ Only with no usable referer does the fallback serve the viewer page.
 
 > **Invariant:** the viewer page must be the *last* resort in the fallback, and
 > the referer check must come first. Reversing this serves HTML where an asset
-> was expected and silently corrupts the framed render. This branch has no
-> tests; treat it carefully.
+> was expected and silently corrupts the framed render. Tests cover listener
+> isolation and referer routing; keep those tests aligned with changes here.
 
 ### 3.4 Response handling
 
@@ -178,8 +179,11 @@ loops between the two `scroll` event streams.
 
 ### 5.1 Concepts
 
-- **`scrollOwner`** — the side currently driving. Frame input messages select
-  the owner; only that side's scroll messages propagate to the other side.
+- **`scrollOwner`** — the side currently driving. Any `scroll`/wheel event that
+  clears that side's suppress window claims ownership; the counter-scroll we push
+  to the other side lands inside *its* suppress window and never claims it. So
+  whichever pane the user actually touches becomes the authority, and either pane
+  can take over — no pane "owns" scrolling permanently.
 - **`suppressScrollUntil[side]`** — a short timestamp gate. When we *programmatically*
   set a pane's `scrollTop`, we set this a few ms ahead so the resulting `scroll`
   event is ignored instead of bouncing back. Windows differ by mode (120ms exact,
@@ -204,11 +208,23 @@ paths goes through these, so Overlay/Diff always pixel-lock regardless of the
 user's toggle. The user's `syncScroll` preference is read, never mutated, by
 entering overlay.
 
-### 5.3 Input interception
+> **Overlay paint-order invariant.** In Overlay the panes are
+> `position: absolute` and stacked. The blended pane (`.overlay-top`, which
+> carries the opacity blend and `mix-blend-mode: difference`) **must** sit on top
+> via `z-index`. Flex `order` reorders layout but *not* paint order for
+> absolutely-positioned elements, so without the `z-index` the blend lands on the
+> pane painted underneath and Diff/opacity only work in one Swap direction.
 
-The injected bridge captures wheel, keyboard, click, and scroll events and
-posts normalized messages. The parent computes linked positions and sends
-explicit scroll commands back.
+### 5.3 Two scroll transports
+
+Side-by-side views (Split/Solo) scroll **natively** — the bridge does *not*
+intercept the wheel, so trackpad momentum is preserved. Each pane's native
+`scroll` event is mirrored to the other (`syncFrom` → `alignSide`). Overlay is
+different: the panes are stacked, so there is no second native scroll to mirror
+and pixel-exact lockstep matters for Diff. There the bridge hijacks the wheel
+(`preventDefault` + posts a normalized delta) and the parent drives both panes.
+The parent tells each frame which transport to use via the `stacked` flag in the
+`settings` message; keyboard, click, and `scroll` messages flow in both modes.
 
 > **Invariants:**
 > 1. Every programmatic `scrollTop` write must be preceded by setting
@@ -283,15 +299,16 @@ clobbering, live propagation.
 
 ### 8.1 File as source of truth
 
-`$SITE_COMPARE_NOTES` (default `$TMPDIR/sitedrift-notes.json`). The server
-`loadNotes()` reads it **fresh on every request** — so a direct file edit and a
-server-applied op compose without the server holding stale state.
+`SITEDRIFT_NOTES` / legacy `$SITE_COMPARE_NOTES` (default
+`$TMPDIR/sitedrift-notes.json`). `createNotes().load()` reads it **fresh on every
+request** — so a direct file edit and a server-applied op compose without the
+server holding stale state.
 
 ### 8.2 Op-based mutation, not list replacement
 
 `POST /api/v1/notes` carries one op:
 `add | remove | toggle | resolve | reopen | clear`. The server reads, mutates,
-writes atomically, and returns the new list.
+writes atomically, and returns the new list plus its revision.
 
 > **Why ops, not PUT-the-whole-list:** with two concurrent writers, a full-list
 > PUT races — writer A's stale list overwrites writer B's just-added note.
@@ -306,11 +323,25 @@ also what makes a rendered note **clickable** (`go(note.route)` + focus) and
 ### 8.3 Live propagation
 
 The viewer **polls `GET /api/v1/notes` every 4s** with its bearer token.
+Each response is `{ notes, revision }`, where `revision` is a truncated SHA-256
+of the serialized list. It is an opaque change token, not a sequence number.
 `applyNotes()` compares a JSON
 signature against the last applied list and **only re-renders on change** — so
 polling is cheap and doesn't disturb the drawer or a note being composed.
 `notesPost()` applies the server's returned list immediately for snappy local
 feedback; the poll reconciles everyone else's writes.
+
+The MCP tool `sitedrift_notes_watch` uses the same revision contract. Given a
+revision, it polls the authenticated endpoint inside one tool call until the
+revision changes or the bounded timeout expires. A change returns
+`{ changed: true, revision, notes }`; a timeout returns only
+`{ changed: false, revision }`.
+
+> **Lifecycle limit:** MCP watch is long-polling, not a background subscription.
+> It saves repeated model-visible list calls while an agent turn is active, but
+> it cannot wake a stopped host conversation or autonomously reply after the
+> host ends the turn. Continuous autonomous replies require an external agent
+> process that owns its own model/API lifecycle.
 
 > **Footgun:** do not move notes into URL/localStorage "for consistency" with §6.
 > The file *is* the channel; that's the whole feature.
@@ -319,7 +350,7 @@ feedback; the poll reconciles everyone else's writes.
 
 The channel file is ephemeral (`$TMPDIR`). When `SITE_COMPARE_VAULT` is set, the
 server exposes the authenticated save endpoint, which writes
-`notesMarkdown(loadNotes())` to a
+`notes.markdown(notes.load())` to a
 dated `sitedrift-review-<timestamp>.md` in that dir and returns `{ ok, path }`.
 The viewer only shows the **Send to vault** button when `config.vault` is true.
 This is the loop-closer for a solo operator: review → durable record where
@@ -346,20 +377,25 @@ URL, token, origins, notes path, PID, and start time. `sitedrift context` and
 `sitedrift mcp` and the `sitedrift-mcp` bin expose the same operations over MCP
 stdio. The implementation writes protocol messages only to stdout, supports
 tools/resources/prompts, and keeps HTTP credentials inside the local process.
+The tool surface includes context, list/watch, add/resolve/reopen/remove/clear,
+and setup guidance. `sitedrift_context` must be called first; when no session is
+running, capable agents should inspect and launch the project's established dev
+and sitedrift commands rather than treating setup text as the end of the task.
 
-`/health` returns `{ dev, live, version }` where `version` is `viewerVersion`
-(a module constant). The `site` CLI computes the *expected* health string from
-the dev/live URLs and the version it knows, then compares it to the running
-server's `/health`:
+`/health` returns `{ dev, live, version }` where `version` is the
+`VIEWER_VERSION` module constant. The external `site` wrapper imports that
+constant when the module is available, computes the expected health string from
+the DEV/LIVE URLs, and compares it to the running server's `/health`:
 
 - match → reuse the running server.
 - mismatch (version bumped, or origins changed) → kill/relaunch.
 
-> **Contract:** bump `viewerVersion` whenever the viewer HTML/JS changes in a way
-> that requires a fresh server, and keep the CLI's expected-version literal in
-> lockstep. A stale server serving an old viewer against a new CLI link is the
-> failure this prevents. `brand`/`author`/`notes` are intentionally **excluded**
-> from `/health` — changing them does not force a restart.
+> **Contract:** bump `VIEWER_VERSION` whenever viewer assets change in a way
+> that requires a fresh server. Wrappers should read the exported constant
+> rather than duplicate it. A stale server serving old assets against a new
+> viewer link is the failure this prevents. `brand`/`author`/`notes` are
+> intentionally **excluded** from `/health` — changing them does not force a
+> restart.
 
 ---
 
@@ -378,7 +414,14 @@ sitedrift/
     server.mjs         // handler routing table, http/https bootstrap
     proxy.mjs          // targetFor, rewriteRootPaths, proxy(), header strip set
     notes.mjs          // load/save/apply ops, markdown  ← pure, unit-testable
+    agent.mjs          // authenticated JSON CLI client
+    mcp.mjs            // stdio MCP tools/resources/prompt
+    session.mjs        // mode-0600 session descriptor lifecycle
     viewer.mjs         // loads assets/, injects the per-run config blob
+    tls.mjs            // explicit/automatic local TLS
+    cloudflare.mjs     // preview build wrapper + init scaffold / output-dir detect
+    cloudflare-runtime.mjs // scoped read-only Pages proxy
+    frame-content.mjs  // shared frame rewriting/bridge injection
     http.mjs           // send / readBody
     browser.mjs        // cross-platform --open
   assets/
@@ -398,7 +441,8 @@ Notes on what shipped vs. the original plan:
 - **No build step** — the source ships as-is; `viewer.mjs` does placeholder
   substitution at request time, not a bundle.
 
-Remaining opportunity (not yet done): `assets/viewer.js` is still one ~945-line
+Remaining opportunity (not yet done): `assets/viewer.js` is still one
+~1,150-line
 file. The §5 scroll controller is the crown jewel and the best first candidate to
 split into its own client module with the §5 invariants as test names.
 
@@ -410,13 +454,17 @@ Quick reference for "things that look removable but aren't":
 
 - Referer rescue must precede the viewer fallback (§3.3).
 - Every programmatic scroll write sets `suppressScrollUntil` first (§5.3).
+- The wheel is hijacked only in Overlay; side-by-side scrolls natively (§5.3).
+- In Overlay the blended `.overlay-top` pane stacks on top via `z-index` (§5.2).
 - Frame messages validate both origin and source (§4–5).
 - The frame listener exposes proxy routes only (§2).
 - Notes use op-based POST, never full-list replacement (§8.2).
 - Notes live in the file, not URL/storage (§8.3).
+- Notes revisions are opaque content hashes, not ordered counters (§8.3).
+- MCP watch cannot outlive the host's active tool call/turn (§8.3).
 - `<` is escaped in the injected `config` JSON (§4).
 - `accept-encoding` is dropped before proxying so the body is rewritable (§3.4).
-- Bump `viewerVersion` + the CLI literal together (§9).
+- Bump exported `VIEWER_VERSION` for viewer asset changes (§9).
 - No npm dependencies without a deliberate trade-off (§1).
 
 ---
@@ -429,8 +477,9 @@ defects. Severity: 🔴 high · 🟠 medium · 🟡 low · 💡 idea.
 
 > **Update — resolved:** **P1–P8 are fixed** and **I1 (difference-blend overlay)
 > is implemented**. They're kept below as a record of the reasoning and fix.
-> **I2–I10 remain open** *(note I9 is partly addressed — the CLI prints the notes
-> path, the viewer still doesn't).*
+> **I2–I6 and I8–I10 remain open** *(I5's 1,000-note cap is shipped, but
+> done-note cleanup is not; I9 is partly addressed because the CLI prints the
+> notes path while the viewer still does not). I7 is complete.*
 >
 > **Shipped since this audit** (not in the list below): the unified
 > Split/Solo/Overlay view switch with Diff as the overlay blend; forced
@@ -503,16 +552,19 @@ while the drawer is open).
 **I4 💡 Collapse the duplicated `≠ meta` chip.** It renders on both labels
 (redundant). Use one centered indicator, or have each side describe *its* delta.
 
-**I5 💡 Notes file rotation.** Add a `clear --done` op and/or a soft cap so
-long-lived sessions stay tidy.
+**I5 💡 Notes file rotation.** A 1,000-note soft cap is implemented. A
+`clear --done` operation or archival workflow is still open so long-lived
+sessions can discard completed notes without clearing active findings.
 
 **I6 💡 Runtime `fetch`/import rewriting for SPA support.** An injected shim
 patching `fetch`/`XHR`/`URL` in each frame would lift the "static sites only"
 limit (§3.2). Bigger lift; do it when a real SPA forces it.
 
-**I7 💡 Tests before extraction.** None exist. On extraction (§10), prioritize:
-`applyNoteOp` concurrency, `rewriteRootPaths` fixtures, the §3.3 referer-rescue
-branch (untested, easy to break), and the scroll suppress-window behavior.
+**I7 ✅ Tests around the extracted modules.** Implemented for CLI/config,
+Cloudflare wrapping/runtime behavior, MCP registration/watch behavior, notes
+operations, session URLs, control/frame isolation, and hostname validation.
+Remaining high-value gaps are broader `rewriteRootPaths` fixtures and direct
+scroll suppress-window tests.
 
 **I8 💡 Configurable metadata-diff sensitivity.** Exact-string today; offer
 ignore-whitespace and canonical path-only vs full-URL to cut false positives

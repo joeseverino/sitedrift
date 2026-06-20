@@ -83,11 +83,20 @@ test('parses the Cloudflare preview command', () => {
   ]);
   assert.deepEqual(parsed.command, {
     name: 'cloudflare',
+    action: 'wrap',
     dir: 'build',
     live: 'https://example.test',
     brand: '',
     productionBranch: 'trunk',
+    js: false,
   });
+});
+
+test('parses the Cloudflare init command without requiring --live', () => {
+  const parsed = parseCommand(['cloudflare', 'init', '--js']);
+  assert.equal(parsed.command.action, 'init');
+  assert.equal(parsed.command.js, true);
+  assert.equal(parsed.command.live, '');
 });
 
 test('viewer uses neutral pane identity and current help copy', () => {

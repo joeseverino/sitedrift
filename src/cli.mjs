@@ -4,7 +4,7 @@ import path from 'node:path';
 
 // Short flags and the boolean flags that never consume the next argument.
 const ALIASES = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'version' };
-const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version']);
+const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version', 'js']);
 const VALUE_FLAGS = new Set([
   'dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author',
   'vault', 'config', 'route', 'side', 'dir', 'production-branch',
@@ -110,7 +110,8 @@ Usage:
   sitedrift status
   sitedrift context
   sitedrift mcp
-  sitedrift cloudflare --dir dist --live https://example.com
+  sitedrift cloudflare init --live https://example.com   (scaffold the Pages addon)
+  sitedrift cloudflare --live https://example.com        (wrap a build; --dir auto-detected)
   sitedrift notes list
   sitedrift notes add <text> [--route /path] [--side dev|live] [--author name]
   sitedrift notes resolve|reopen|remove <id>
@@ -196,15 +197,22 @@ export function parseCommand(argv = process.argv.slice(2)) {
   if (!['status', 'context', 'notes', 'mcp', 'cloudflare'].includes(name)) return null;
   if (name === 'cloudflare') {
     const { opts, positionals } = parseArgs(argv.slice(1));
-    if (positionals.length) throw new Error(`Unexpected argument: ${positionals[0]}`);
-    if (!opts.live) throw new Error('sitedrift cloudflare requires --live.');
+    const action = positionals[0] || 'wrap';
+    if (positionals.length > 1) throw new Error(`Unexpected argument: ${positionals[1]}`);
+    if (action !== 'wrap' && action !== 'init') {
+      throw new Error('Usage: sitedrift cloudflare [init] --live <url> [--dir <out>] [--js]');
+    }
+    // `init` only scaffolds the Function file, so --live is optional there.
+    if (action === 'wrap' && !opts.live) throw new Error('sitedrift cloudflare requires --live.');
     return {
       command: {
         name,
-        dir: opts.dir || 'dist',
-        live: opts.live,
+        action,
+        dir: opts.dir || '',
+        live: opts.live || '',
         brand: opts.brand || '',
         productionBranch: opts['production-branch'] || 'main',
+        js: !!opts.js,
       },
       argv: [],
     };

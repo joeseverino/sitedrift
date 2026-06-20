@@ -3,14 +3,25 @@
 Add sitedrift to non-production Cloudflare Pages deployments in two project
 changes. Production builds remain byte-for-byte unchanged.
 
-## 1. Install and wrap the static build
+## Quick setup
 
 ```bash
 npm install --save-dev sitedrift@latest
+npx sitedrift cloudflare init --live https://example.com
 ```
 
-Run the wrapper after the framework build. Replace `dist` with your output
-directory and `https://example.com` with the production origin:
+`init` writes the scoped Pages Function for you (`functions/__sitedrift/[[path]].ts`),
+detects your build output directory, and prints the exact build line to paste —
+something like:
+
+```
+sitedrift: created functions/__sitedrift/[[path]].ts
+Next, add this to your package.json "build" script, after the framework build:
+    sitedrift cloudflare --dir dist --live https://example.com
+Then commit both changes and push a preview branch.
+```
+
+Paste that into your `build` script so it runs after the framework build:
 
 ```json
 {
@@ -20,25 +31,42 @@ directory and `https://example.com` with the production origin:
 }
 ```
 
-The command works with any static framework:
+Commit both changes and push a non-production branch. Its Pages URL opens in
+compact DEV Solo view and can switch to Split, Overlay, or Diff against
+production. That is the whole setup — no dashboard settings or bindings.
 
-| Framework | Build command |
-|---|---|
-| Astro | `astro build` |
-| Vite | `vite build` |
-| Eleventy | `eleventy` |
-| Static HTML | your existing command |
+Prefer JavaScript over TypeScript for the Function? `init --js` writes
+`[[path]].js` instead.
 
-## 2. Add the scoped Pages Function
+## What `init` does for you, by hand
 
-Create `functions/__sitedrift/[[path]].ts`:
+If you would rather wire it up manually, the two changes are:
 
-```ts
-export { onRequest } from 'sitedrift/cloudflare';
-```
+1. Add the wrapper after the framework build. `--dir` is auto-detected when
+   omitted (the build has already run by then), so you usually only need `--live`:
 
-Commit and push a non-production branch. Its Pages URL opens in compact DEV
-Solo view and can switch to Split, Overlay, or Diff against production.
+   ```json
+   {
+     "scripts": {
+       "build": "astro build && sitedrift cloudflare --live https://example.com"
+     }
+   }
+   ```
+
+   It works with any static framework:
+
+   | Framework | Build command | Output dir |
+   |---|---|---|
+   | Astro | `astro build` | `dist` |
+   | Vite | `vite build` | `dist` |
+   | Eleventy | `eleventy` | `_site` |
+   | Static HTML | your existing command | varies |
+
+2. Create `functions/__sitedrift/[[path]].ts`:
+
+   ```ts
+   export { onRequest } from 'sitedrift/cloudflare';
+   ```
 
 ## What the deployment looks like
 

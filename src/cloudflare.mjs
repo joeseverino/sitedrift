@@ -16,6 +16,17 @@ function htmlFiles(root) {
   return found;
 }
 
+// Common static-build output directories, in priority order. Used to spare the
+// user from having to know (or mistype) their framework's output path.
+const OUTPUT_DIRS = ['dist', '_site', 'build', 'public', 'out', '.output/public', '.vercel/output/static'];
+
+function detectOutputDir(cwd = process.cwd()) {
+  for (const name of OUTPUT_DIRS) {
+    if (fs.existsSync(path.join(cwd, name))) return name;
+  }
+  return '';
+}
+
 function routeFor(relative) {
   if (relative === 'index.html') return '/';
   if (relative.endsWith('/index.html')) return `/${relative.slice(0, -'index.html'.length)}`;
@@ -46,7 +57,8 @@ export function installCloudflarePreview({
     return { installed: false, reason: branch === productionBranch ? 'production branch' : 'not a Pages preview' };
   }
 
-  const output = path.resolve(dir);
+  const resolvedDir = dir || detectOutputDir() || 'dist';
+  const output = path.resolve(resolvedDir);
   if (!fs.existsSync(output)) throw new Error(`Build output does not exist: ${output}`);
   const files = htmlFiles(output);
   if (!files.length) throw new Error(`No HTML files found in ${output}`);
@@ -75,4 +87,25 @@ export function installCloudflarePreview({
   fs.writeFileSync(path.join(assetDir, 'icon.svg'), assets.icon);
   fs.writeFileSync(path.join(internal, 'config.json'), JSON.stringify({ live: liveUrl }));
   return { installed: true, branch: branch || 'forced', files: files.length };
+}
+
+// One-shot scaffolder: writes the scoped Pages Function so the user never has to
+// hand-create it, and returns the exact build line to add. Idempotent.
+export function scaffoldCloudflarePreview({ cwd = process.cwd(), js = false, live = '', dir = '' } = {}) {
+  const ext = js ? 'js' : 'ts';
+  const functionDir = path.join(cwd, 'functions', '__sitedrift');
+  const functionFile = path.join(functionDir, `[[path]].${ext}`);
+  const created = !fs.existsSync(functionFile);
+  if (created) {
+    fs.mkdirSync(functionDir, { recursive: true });
+    fs.writeFileSync(functionFile, "export { onRequest } from 'sitedrift/cloudflare';\n");
+  }
+  const outDir = dir || detectOutputDir(cwd) || 'dist';
+  const liveArg = live || 'https://your-production-site.example';
+  return {
+    created,
+    functionFile: path.relative(cwd, functionFile),
+    outDir,
+    buildLine: `sitedrift cloudflare --dir ${outDir} --live ${liveArg}`,
+  };
 }

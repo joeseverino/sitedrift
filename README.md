@@ -80,11 +80,16 @@ Turn every non-production Cloudflare Pages deployment into a compact sitedrift
 review URL. The deployment opens its own preview in DEV Solo mode and can switch
 to Split, Overlay, or Diff against the configured production site.
 
-Install sitedrift and run the wrapper after your static build:
+Install sitedrift, then let `init` scaffold the integration:
 
 ```bash
 npm install --save-dev sitedrift@latest
+npx sitedrift cloudflare init --live https://example.com
 ```
+
+`init` writes the scoped Pages Function (`functions/__sitedrift/[[path]].ts`),
+detects your build output directory, and prints the exact build line to paste
+after your framework build:
 
 ```json
 {
@@ -94,17 +99,11 @@ npm install --save-dev sitedrift@latest
 }
 ```
 
-Add one scoped Pages Function:
-
-```ts
-// functions/__sitedrift/[[path]].ts
-export { onRequest } from 'sitedrift/cloudflare';
-```
-
-That is the entire integration. On Cloudflare Pages, the wrapper activates only
-when `CF_PAGES=1` and `CF_PAGES_BRANCH` is not `main`. Production builds are
-left unchanged. Use `--production-branch <name>` when production is another
-branch.
+(`--dir` is auto-detected at build time, so the wrapper also works as just
+`sitedrift cloudflare --live https://example.com`.) On Cloudflare Pages, the
+wrapper activates only when `CF_PAGES=1` and `CF_PAGES_BRANCH` is not `main`.
+Production builds are left unchanged. Use `--production-branch <name>` when
+production is another branch.
 
 Hosted proxies are read-only (`GET`/`HEAD`) and fixed to the configured live
 origin. Frames run the compared site's scripts so interactive previews behave
@@ -168,7 +167,8 @@ release badge change while the underlying layout stays aligned.
 <p align="center">
   <img src="docs/images/sitedrift-mobile.jpg" alt="sitedrift Solo mode on a narrow mobile viewport" width="360">
   <br><strong>Focused mobile review</strong><br>
-  Narrow screens default to Solo; Swap flips between DEV and LIVE.
+  Narrow screens default to Solo; Swap flips between DEV and LIVE, and Overlay
+  surfaces a Diff control so you can isolate changes on a phone too.
 </p>
 
 Rebuild these screenshots from the deterministic local showcase:
@@ -280,6 +280,21 @@ Without a global install:
 Agents call `sitedrift_context` first, then use the note tools to share findings
 with the user. The server also exposes `sitedrift://guide`, a `review_route`
 prompt, and `sitedrift_setup` for install/config/HTTPS guidance.
+
+`sitedrift_notes_list` returns an opaque `revision`. Pass that value to
+`sitedrift_notes_watch` to wait until notes change:
+
+```json
+{
+  "port": 4178,
+  "revision": "6c12dbe41a39c2f7",
+  "timeoutMs": 25000
+}
+```
+
+The watch polls only inside the MCP tool call. A changed response contains the
+same notes payload as a normal list; an unchanged timeout returns only
+`changed: false` and the revision, avoiding repeated model-visible list output.
 
 For hosts without MCP, use the JSON CLI instead of scraping the viewer or
 constructing authenticated requests:

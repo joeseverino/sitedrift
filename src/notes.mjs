@@ -1,5 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
+
+export function notesRevision(notes) {
+  return createHash('sha256').update(JSON.stringify(notes)).digest('hex').slice(0, 16);
+}
 
 // Review notes are a JSON file the server reads/mutates and the viewer polls,
 // making it a shared channel between humans and AI sessions.

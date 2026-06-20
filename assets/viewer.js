@@ -548,7 +548,7 @@
     function effScrollMode() { return stacked() ? 'exact' : scrollMode; }
 
     function applyFrameSettings(side) {
-      framePost(side, 'settings', { linked: linked(), mirror: mirrorLinks });
+      framePost(side, 'settings', { linked: linked(), mirror: mirrorLinks, stacked: stacked() });
     }
 
     function setLinkedScroll(sourceSide, requestedY) {
@@ -585,8 +585,11 @@
 
     function syncFrom(side, force = false) {
       if (!linked() || Date.now() < suppressScrollUntil[side]) return;
-      if (!scrollOwner) scrollOwner = side;
-      if (!force && scrollOwner !== side) return;
+      // A scroll event that clears the suppress window is a genuine user scroll on
+      // `side`, so hand that pane ownership — the counter-scroll we push to the other
+      // side lands inside its suppress window and never reaches here. This lets either
+      // pane lead with native momentum instead of the first scroller owning forever.
+      scrollOwner = side;
       if (effScrollMode() === 'exact') {
         alignSide(side, side === 'dev' ? 'live' : 'dev');
         return;
