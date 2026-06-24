@@ -371,7 +371,7 @@ for desktop split, narrow Solo, difference overlay, and the notes drawer.
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internals, invariants, and the
   module map.
-- [`docs/CLOUDFLARE-PAGES.md`](docs/CLOUDFLARE-PAGES.md) — two-step hosted
+- [`docs/CLOUDFLARE-PAGES.md`](docs/CLOUDFLARE-PAGES.md) — one-command hosted
   preview setup, production guard, security model, and a real deployment.
 
 ## Credits

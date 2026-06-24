@@ -571,7 +571,7 @@ ignore-whitespace and canonical path-only vs full-URL to cut false positives
 between environments.
 
 **I9 💡 Surface the notes-file path in the viewer.** The CLI prints it; a
-browser-only user can't see where notes live. Show `$SITE_COMPARE_NOTES` in the
+browser-only user can't see where notes live. Show `SITEDRIFT_NOTES` in the
 Help card.
 
 **I10 💡 "Open both at this route."** One action to open/copy both direct URLs,

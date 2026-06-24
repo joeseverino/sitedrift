@@ -583,7 +583,7 @@
       framePost(targetSide, 'scroll', { y: targetY });
     }
 
-    function syncFrom(side, force = false) {
+    function syncFrom(side) {
       if (!linked() || Date.now() < suppressScrollUntil[side]) return;
       // A scroll event that clears the suppress window is a genuine user scroll on
       // `side`, so hand that pane ownership — the counter-scroll we push to the other
@@ -679,7 +679,7 @@
       saveBool('scroll', 'site-compare-scroll', syncScroll);
       for (const side of ['dev', 'live']) applyFrameSettings(side);
       renderSettings();
-      if (syncScroll) syncFrom(focusSide, true);
+      if (syncScroll) syncFrom(focusSide);
     });
     function renderSetting(button, active, stateText) {
       button.classList.toggle('active', active);
@@ -704,7 +704,7 @@
       setUrlParam('scrollMode', scrollMode);
       renderScrollMode();
       for (const side of ['dev', 'live']) applyFrameSettings(side);
-      if (syncScroll) syncFrom(focusSide, true);
+      if (syncScroll) syncFrom(focusSide);
     });
     mirrorButton.addEventListener('click', () => {
       mirrorLinks = !mirrorLinks;
