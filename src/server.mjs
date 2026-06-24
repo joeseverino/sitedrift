@@ -3,7 +3,7 @@ import https from 'node:https';
 import fs from 'node:fs';
 
 import { send, readBody } from './http.mjs';
-import { createNotes } from './notes.mjs';
+import { createNotes, notesRevision } from './notes.mjs';
 import { createProxy } from './proxy.mjs';
 import { assets, renderViewer, VIEWER_VERSION } from './viewer.mjs';
 
@@ -93,7 +93,7 @@ export function createServer(config, tls, session, { control = true, side: frame
             notesFile: session.notesFile,
             startedAt: session.startedAt,
           },
-          capabilities: ['notes:list', 'notes:add', 'notes:resolve', 'notes:reopen', 'notes:remove', 'notes:clear'],
+          capabilities: ['notes:list', 'notes:watch', 'notes:add', 'notes:resolve', 'notes:reopen', 'notes:remove', 'notes:clear'],
           notes: notes.load(),
         });
       }
@@ -103,7 +103,8 @@ export function createServer(config, tls, session, { control = true, side: frame
         return;
       }
       if (req.method === 'GET') {
-        json(res, 200, { notes: notes.load() });
+        const list = notes.load();
+        json(res, 200, { notes: list, revision: notesRevision(list) });
       } else if (req.method === 'POST') {
         // Require a JSON content-type so cross-origin writes need a preflight the
         // server (no CORS headers) will fail — closes the text/plain CSRF path.
@@ -112,7 +113,8 @@ export function createServer(config, tls, session, { control = true, side: frame
         } else {
           try {
             const op = JSON.parse((await readBody(req)) || '{}');
-            json(res, 200, { notes: notes.applyOp(op) });
+            const list = notes.applyOp(op);
+            json(res, 200, { notes: list, revision: notesRevision(list) });
           } catch (error) {
             json(res, 400, { error: error.message });
           }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { handleMcpRequest } from '../src/mcp.mjs';
+import { handleMcpRequest, watchNotes } from '../src/mcp.mjs';
 
 test('MCP initializes and advertises the compact tool surface', async () => {
   const initialized = await handleMcpRequest({
@@ -16,8 +16,33 @@ test('MCP initializes and advertises the compact tool surface', async () => {
   const listed = await handleMcpRequest({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
   const names = listed.result.tools.map((tool) => tool.name);
   assert.ok(names.includes('sitedrift_context'));
+  assert.ok(names.includes('sitedrift_notes_watch'));
   assert.ok(names.includes('sitedrift_note_add'));
   assert.ok(names.includes('sitedrift_setup'));
+});
+
+test('MCP notes watch returns only after the revision changes', async () => {
+  let calls = 0;
+  const session = {};
+  const responses = [
+    { revision: 'old', notes: [] },
+    { revision: 'new', notes: [{ id: '1', text: 'changed' }] },
+  ];
+  const request = async () => responses[Math.min(calls++, responses.length - 1)];
+
+  const result = await watchNotes(
+    session,
+    {
+      revision: 'old',
+      timeoutMs: 1000,
+    },
+    { request, intervalMs: 0 },
+  );
+  assert.deepEqual(result, {
+    changed: true,
+    revision: 'new',
+    notes: [{ id: '1', text: 'changed' }],
+  });
 });
 
 test('MCP setup works before a sitedrift session exists', async () => {

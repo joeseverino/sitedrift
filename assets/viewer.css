@@ -258,14 +258,16 @@ button[data-action="notes"] {
 }
 .compactbar .modes button { block-size: 30px; padding: 0 9px; }
 
-/* Overlay opacity slider + difference-blend toggle. */
+/* Difference-blend toggle + overlay opacity slider. The Diff toggle is always
+   available (clicking it drops into Overlay); the opacity range is only
+   meaningful once the panes are stacked, so it stays overlay-only. */
 .overlay-slider {
-  display: none;
+  display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 2px;
 
-  & input[type="range"] { inline-size: 120px; accent-color: var(--live); transition: opacity var(--t-fast) var(--ease); }
+  & input[type="range"] { display: none; inline-size: 120px; accent-color: var(--live); transition: opacity var(--t-fast) var(--ease); }
 }
 .overlay-blend.active { color: #fff; background: var(--active); border-color: var(--active-line); }
 
@@ -701,10 +703,13 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
   & .stage { grid-template-columns: minmax(0, 1fr); }
   & .pane { position: absolute; inset: 0; }
   & .pane:first-child { border-right: 0; }
-  & .overlay-top { opacity: var(--overlay, .5); }
+  /* Flex `order` reorders layout but not paint order for absolutely-positioned
+     panes, so pin the blended pane on top via z-index — otherwise Diff/opacity
+     land on the pane painted underneath and only line up in one swap direction. */
+  & .overlay-top { z-index: 1; opacity: var(--overlay, .5); }
   & .divider { display: none; }
   & .labels { grid-template-columns: 1fr 1fr; }
-  & .overlay-slider { display: flex; }
+  & .overlay-slider input[type="range"] { display: inline-block; }
 
   &.diff .stage { background: #000; }
   &.diff .overlay-top { opacity: 1; mix-blend-mode: difference; }
@@ -968,6 +973,26 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
     justify-content: center;
   }
   [data-action="notes-dock"] { display: none; }
+
+  /* Diff is the headline feature and there is no keyboard on touch, so in Overlay
+     float the Diff toggle + opacity slider as a bottom pill instead of hiding it.
+     Only the visible bar's slider renders (the other bar is display:none). */
+  .app.overlay .overlay-slider {
+    display: flex;
+    position: fixed;
+    z-index: 42;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    gap: 12px;
+    padding: 7px 8px 7px 14px;
+    background: rgb(17 19 24 / 96%);
+    border: 1px solid var(--card-line);
+    border-radius: var(--pill);
+    box-shadow: var(--shadow-pop);
+  }
+  .app.overlay .overlay-slider input[type="range"] { inline-size: 108px; }
+  .app.overlay.diff .diff-legend { bottom: 66px; }
 }
 
 @media (width <= 360px) {

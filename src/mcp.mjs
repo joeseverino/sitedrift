@@ -38,6 +38,21 @@ const TOOLS = [
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   {
+    name: 'sitedrift_notes_watch',
+    title: 'Watch review notes',
+    description: 'Wait for shared review notes to change. Pass the revision from notes_list to avoid a race; without one, watch from the current state.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        revision: { type: 'string', minLength: 1, description: 'Opaque revision returned by sitedrift_notes_list or a previous watch.' },
+        timeoutMs: { type: 'integer', minimum: 1000, maximum: 55000, default: 25000 },
+        port: { type: 'integer', minimum: 1, maximum: 65533, default: 4178 },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
     name: 'sitedrift_note_add',
     title: 'Add a review note',
     description: 'Add one concrete visual finding for the user or another agent.',
@@ -144,11 +159,35 @@ function noteOperation(name, args) {
   return { op: name.replace('sitedrift_note_', ''), id: args.id };
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function watchNotes(
+  session,
+  { revision, timeoutMs = 25000 } = {},
+  { request = requestSession, intervalMs = 250 } = {},
+) {
+  const timeout = Math.min(55000, Math.max(1000, timeoutMs));
+  const deadline = Date.now() + timeout;
+  let current = await request(session, '/api/v1/notes');
+  const baseline = revision || current.revision;
+
+  while (current.revision === baseline && Date.now() < deadline) {
+    await sleep(Math.min(intervalMs, Math.max(0, deadline - Date.now())));
+    current = await request(session, '/api/v1/notes');
+  }
+
+  if (current.revision === baseline) return { changed: false, revision: current.revision };
+  return { changed: true, revision: current.revision, notes: current.notes };
+}
+
 async function callTool(name, args = {}) {
   if (name === 'sitedrift_setup') return setupInstructions(args);
   const session = readSession(args.port || 4178);
   if (name === 'sitedrift_context') return requestSession(session, '/api/v1/session');
   if (name === 'sitedrift_notes_list') return requestSession(session, '/api/v1/notes');
+  if (name === 'sitedrift_notes_watch') return watchNotes(session, args);
   if (!TOOLS.some((tool) => tool.name === name)) throw new Error(`Unknown tool: ${name}`);
   return requestSession(session, '/api/v1/notes', {
     method: 'POST',
@@ -164,7 +203,8 @@ function guideText() {
 3. Record one concrete issue per sitedrift_note_add call. Include the route and side.
 4. Re-list notes before changing code and after verification.
 5. Resolve a note only after verifying the fix; remove notes only when explicitly asked.
-6. If no session is running, call sitedrift_setup and help the user create sitedrift.config.json, then launch sitedrift.
+6. If no session is running and shell access is available, inspect the project for its dev command and existing sitedrift wrapper/config, start both, then retry sitedrift_context.
+7. Use sitedrift_setup only when you cannot launch the project yourself. Prefer project-local HTTPS, hostname, certificate, and port conventions over generic loopback defaults.
 
 The MCP server never receives browser credentials and only talks to a loopback sitedrift session using its private mode-0600 descriptor.`;
 }

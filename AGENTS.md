@@ -58,18 +58,26 @@ only when the host cannot run MCP.
    `route`; provide `side` when the issue belongs specifically to DEV or LIVE.
 5. Re-list notes after code changes. Resolve only findings you verified.
 6. Remove or clear notes only when the user explicitly requests it.
+7. If `sitedrift_context` reports no session and shell access is available,
+   inspect the project for its dev command and existing sitedrift wrapper or
+   config, start both, then retry. Do not stop at generic setup instructions
+   when the user asked you to perform the review.
+8. Prefer the project's established hostname, HTTPS certificate, port, and
+   wrapper over generic loopback defaults.
 
 Hosted Cloudflare preview deployments are a different mode: their notes are
 browser-local and intentionally unavailable to MCP. Use browser inspection for
 those URLs. Do not claim that a hosted note was shared with an agent or written
-to the project. Setup is two project changes and is documented in
-`docs/CLOUDFLARE-PAGES.md`; do not instruct users to change Cloudflare dashboard
-settings or bindings.
+to the project. Setup is one command (`npx sitedrift cloudflare init --live <url>`,
+which scaffolds the scoped Pages Function and prints the build line to paste),
+documented in `docs/CLOUDFLARE-PAGES.md`; do not instruct users to change
+Cloudflare dashboard settings or bindings.
 
 ## MCP tools
 
 - `sitedrift_context`: active targets, viewer URL, and capabilities.
 - `sitedrift_notes_list`: shared findings.
+- `sitedrift_notes_watch`: wait for notes to change without repeated model-visible polling.
 - `sitedrift_note_add`: add one actionable finding.
 - `sitedrift_note_resolve`: mark a verified finding complete.
 - `sitedrift_note_reopen`: reopen a regressed or incomplete finding.

@@ -158,7 +158,13 @@ fs.writeFileSync(notesFile, JSON.stringify([
   },
 ], null, 2), { mode: 0o600 });
 
-const dev = fixture(45101, page({
+// Ports default to the committed range but are env-overridable so the suite can
+// run alongside a live sitedrift preview without colliding on these ports.
+const PORT = Number(process.env.SD_E2E_PORT || 45110);
+const DEV_PORT = Number(process.env.SD_E2E_DEV_PORT || 45101);
+const LIVE_PORT = Number(process.env.SD_E2E_LIVE_PORT || 45102);
+
+const dev = fixture(DEV_PORT, page({
   label: 'Development',
   accent: '#6d5dfc',
   accentSoft: 'rgb(109 93 252 / 20%)',
@@ -173,7 +179,7 @@ const dev = fixture(45101, page({
   release: 'Candidate · v2.4',
   releaseClass: 'subtle',
 }));
-const live = fixture(45102, page({
+const live = fixture(LIVE_PORT, page({
   label: 'Production',
   accent: '#6357e8',
   accentSoft: 'rgb(99 87 232 / 18%)',
@@ -191,9 +197,9 @@ const live = fixture(45102, page({
 const child = spawn(process.execPath, [
   new URL('../sitedrift.mjs', import.meta.url).pathname,
   '/product',
-  '--port', '45110',
-  '--dev', 'http://127.0.0.1:45101',
-  '--live', 'http://127.0.0.1:45102',
+  '--port', String(PORT),
+  '--dev', `http://127.0.0.1:${DEV_PORT}`,
+  '--live', `http://127.0.0.1:${LIVE_PORT}`,
   '--notes', notesFile,
   '--author', 'visual-test',
 ], { cwd: root, stdio: 'inherit' });
