@@ -5,10 +5,20 @@ import { frameBridge, rewriteRootPaths } from './frame-content.mjs';
 // root-relative URLs so both sites render framed side-by-side. Deliberately
 // strips framing/isolation headers — safe for loopback development only.
 export function createProxy({ devBase, liveBase }) {
+  for (const [name, base] of [['dev', devBase], ['live', liveBase]]) {
+    if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) {
+      throw new Error(`${name} proxy origin must be an HTTP(S) URL without credentials.`);
+    }
+  }
+
   function targetFor(side, pathname, search) {
     const base = side === 'dev' ? devBase : liveBase;
     const relative = pathname.replace(new RegExp(`^/__${side}`), '') || '/';
-    return new URL(`${relative}${search}`, `${base.href}/`);
+    const target = new URL(base);
+    target.pathname = relative;
+    target.search = search;
+    if (target.origin !== base.origin) throw new Error('Proxy target escaped its configured origin.');
+    return target;
   }
 
   async function proxy(req, res, side, requestUrl) {
@@ -18,6 +28,7 @@ export function createProxy({ devBase, liveBase }) {
     delete headers.connection;
 
     try {
+      // lgtm[js/request-forgery] -- local proxy is constrained to the validated configured origin above.
       const upstream = await fetch(target, {
         method: req.method,
         headers,

@@ -81,12 +81,19 @@
 
     function frame(side) { return document.querySelector('iframe[data-side="' + side + '"]'); }
     function proxyPath(side) { return config.hosted ? '/__sitedrift/' + side : '/__' + side; }
-    function proxied(side, route) { return config.frameOrigins[side] + proxyPath(side) + normalizeRoute(route); }
+    function httpUrl(base, route) {
+      const origin = new URL(base);
+      if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Expected an HTTP(S) origin.');
+      return new URL(normalizeRoute(route), origin).href;
+    }
+    function proxied(side, route) {
+      return httpUrl(config.frameOrigins[side], proxyPath(side) + normalizeRoute(route));
+    }
     function statusUrl(side, route) { return proxyPath(side) + normalizeRoute(route); }
     function direct(side, route) {
       return config.hosted && side === 'dev'
-        ? location.origin + proxyPath(side) + normalizeRoute(route)
-        : config[side] + normalizeRoute(route);
+        ? httpUrl(location.origin, proxyPath(side) + normalizeRoute(route))
+        : httpUrl(config[side], normalizeRoute(route));
     }
     const neutralSiteIcon = 'data:image/svg+xml,'
       + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'

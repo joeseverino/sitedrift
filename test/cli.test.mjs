@@ -16,6 +16,8 @@ test('rejects unknown options and invalid ports', () => {
   assert.throws(() => resolveConfig(['--port', '65534', ...live]), /next two ports/);
   assert.throws(() => resolveConfig(['--host', 'compare.homelab', ...live]), /Host must be loopback/);
   assert.throws(() => resolveConfig(['--hostname', 'bad host', ...live]), /Hostname must be a valid/);
+  assert.throws(() => resolveConfig(['--live', 'file:///tmp/site']), /must be HTTP\(S\)/);
+  assert.throws(() => resolveConfig(['--live', 'https://user:secret@example.test']), /without credentials/);
 });
 
 test('requires certificate and key together', () => {

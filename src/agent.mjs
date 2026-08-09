@@ -17,7 +17,7 @@ export async function requestSession(session, pathname, init = {}) {
   const text = await new Promise((resolve, reject) => {
     const req = transport.request(url, {
       method: init.method || 'GET',
-      rejectUnauthorized: false,
+      ...(session.ca ? { ca: Buffer.from(session.ca, 'base64') } : {}),
       headers: {
         authorization: `Bearer ${session.token}`,
         'content-type': 'application/json',

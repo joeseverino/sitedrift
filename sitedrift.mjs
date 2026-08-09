@@ -70,7 +70,7 @@ if (command?.name === 'mcp') {
   }
 
   const scheme = tls ? 'https' : 'http';
-  const session = createSession(config, scheme);
+  const session = createSession(config, scheme, tls);
   const server = createServer(config, tls, session);
   const devFrameServer = createServer(config, tls, session, { control: false, side: 'dev' });
   const liveFrameServer = createServer(config, tls, session, { control: false, side: 'live' });

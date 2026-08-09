@@ -19,3 +19,15 @@ test('uses the browser hostname for control and isolated frame URLs', () => {
     live: 'https://compare.homelab:4180',
   });
 });
+
+test('HTTPS sessions pin the exact local certificate for control clients', () => {
+  const config = {
+    host: '127.0.0.1',
+    port: 4178,
+    devBase: new URL('http://127.0.0.1:4321'),
+    liveBase: new URL('https://example.com'),
+  };
+  const session = createSession(config, 'https', { cert: Buffer.from('local certificate') });
+
+  assert.equal(Buffer.from(session.ca, 'base64').toString(), 'local certificate');
+});
