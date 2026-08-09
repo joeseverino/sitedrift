@@ -14,7 +14,9 @@ export function createProxy({ devBase, liveBase }) {
   function targetFor(side, pathname, search) {
     const base = side === 'dev' ? devBase : liveBase;
     const relative = pathname.replace(new RegExp(`^/__${side}`), '') || '/';
-    const target = new URL(`${relative}${search}`, `${base.href}/`);
+    const target = new URL(base);
+    target.pathname = relative;
+    target.search = search;
     if (target.origin !== base.origin) throw new Error('Proxy target escaped its configured origin.');
     return target;
   }
@@ -26,7 +28,8 @@ export function createProxy({ devBase, liveBase }) {
     delete headers.connection;
 
     try {
-      const upstream = await fetch(target, { // lgtm[js/request-forgery] -- fixed configured origin
+      // lgtm[js/request-forgery] -- local proxy is constrained to the validated configured origin above.
+      const upstream = await fetch(target, {
         method: req.method,
         headers,
         redirect: 'manual',
