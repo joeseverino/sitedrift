@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 
 const root = new URL('../', import.meta.url);
 const outputDir = new URL('../docs/images/', import.meta.url);

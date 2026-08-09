@@ -25,6 +25,8 @@
     "node": ">=18"
   },
   "scripts": {
+    "check": "npm test && npm run check:package",
+    "check:package": "npm pack --dry-run",
     "start": "node sitedrift.mjs",
     "test": "for f in sitedrift.mjs src/*.mjs assets/viewer.js test/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
     "test:e2e:visual": "VISUAL=1 playwright test",
@@ -60,7 +62,6 @@
     "./cloudflare": "./src/cloudflare-runtime.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
-    "playwright": "^1.60.0"
+    "@playwright/test": "^1.62.1"
   }
 }
