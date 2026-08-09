@@ -89,6 +89,9 @@ function boolean(value, name) {
 
 export function cleanBase(value) {
   const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+    throw new Error('Site origins must be HTTP(S) URLs without credentials.');
+  }
   url.pathname = url.pathname.replace(/\/+$/, '');
   url.search = '';
   url.hash = '';

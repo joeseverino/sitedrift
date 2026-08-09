@@ -9,7 +9,7 @@ export function sessionFile(port) {
   return path.join(SESSION_DIR, `${port}.json`);
 }
 
-export function createSession(config, scheme) {
+export function createSession(config, scheme, tls = null) {
   const token = crypto.randomBytes(32).toString('base64url');
   const publicHost = config.hostname || config.host;
   const host = publicHost.includes(':') ? `[${publicHost}]` : publicHost;
@@ -24,6 +24,7 @@ export function createSession(config, scheme) {
     url,
     frameUrls,
     token,
+    ca: tls?.cert ? Buffer.from(tls.cert).toString('base64') : undefined,
     dev: config.devBase.href.replace(/\/$/, ''),
     live: config.liveBase.href.replace(/\/$/, ''),
     notesFile: config.notesFile,
