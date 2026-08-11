@@ -749,9 +749,14 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
   border-left: 1px solid var(--line);
   box-shadow: -18px 0 55px rgb(0 0 0 / 60%);
   transform: translateX(102%);
-  transition: transform var(--t) var(--ease);
+  visibility: hidden;
+  transition: transform var(--t) var(--ease), visibility 0s linear var(--t);
 
-  &.open { transform: translateX(0); }
+  &.open {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
 }
 .review-drawer:has(.local-notes-notice:not([hidden])) {
   grid-template-rows: auto auto minmax(0, 1fr) auto;

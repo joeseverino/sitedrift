@@ -29,11 +29,17 @@ export function createProxy({ devBase, liveBase }) {
 
     try {
       // lgtm[js/request-forgery] -- local proxy is constrained to the validated configured origin above.
-      const upstream = await fetch(target, {
+      const init = {
         method: req.method,
         headers,
         redirect: 'manual',
-      });
+      };
+      if (!['GET', 'HEAD'].includes(req.method || 'GET')) {
+        init.body = req;
+        // Node's fetch requires this opt-in when streaming an incoming request.
+        init.duplex = 'half';
+      }
+      const upstream = await fetch(target, init);
       const responseHeaders = {};
       upstream.headers.forEach((value, key) => {
         if (![
@@ -77,7 +83,7 @@ export function createProxy({ devBase, liveBase }) {
       }
 
       res.writeHead(upstream.status, responseHeaders);
-      res.end(Buffer.from(await upstream.arrayBuffer()));
+      res.end(req.method === 'HEAD' ? undefined : Buffer.from(await upstream.arrayBuffer()));
     } catch (error) {
       const nextStep = side === 'dev'
         ? 'Start your development server (usually: npm run dev), then reload.'

@@ -58,6 +58,30 @@ test.describe('visual regression', () => {
     await expect(page).toHaveScreenshot('notes-drawer.png', SCREENSHOT);
   });
 
+  test('notes drawer exposes only its open state and restores keyboard focus', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await ready(page);
+
+    const notes = page.locator('.toolbar [data-action="notes"]');
+    const drawer = page.locator('.review-drawer');
+    await expect(notes).toHaveAttribute('aria-expanded', 'false');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    await expect(drawer).toHaveAttribute('inert', '');
+    await expect(page.getByRole('complementary', { name: 'Review notes' })).toHaveCount(0);
+
+    await notes.focus();
+    await notes.press('Enter');
+    await expect(notes).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    await expect(drawer).not.toHaveAttribute('inert', '');
+    await expect(page.getByRole('complementary', { name: 'Review notes' })).toHaveCount(1);
+    await expect(page.getByRole('textbox', { name: 'New review note' })).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveAttribute('aria-hidden', 'true');
+    await expect(notes).toBeFocused();
+  });
+
   test('response details popover and stable compact controls', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await ready(page);
