@@ -8,14 +8,24 @@ export function send(res, status, body, type = 'text/plain; charset=utf-8') {
   res.end(body);
 }
 
-export function readBody(req) {
-  return new Promise((resolve) => {
+export function readBody(req, limit = 1e6) {
+  return new Promise((resolve, reject) => {
     let data = '';
+    let settled = false;
     req.on('data', (chunk) => {
+      if (settled) return;
       data += chunk;
-      if (data.length > 1e6) req.destroy();
+      if (data.length > limit) {
+        settled = true;
+        data = '';
+        const error = new Error('request body too large');
+        error.statusCode = 413;
+        reject(error);
+      }
     });
-    req.on('end', () => resolve(data));
-    req.on('error', () => resolve(data));
+    req.on('end', () => {
+      if (!settled) resolve(data);
+    });
+    req.on('error', reject);
   });
 }

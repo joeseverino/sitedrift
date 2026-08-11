@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import { createServer } from '../src/server.mjs';
 
-function request(port, pathname, { token, referer, hostname, method = 'GET', body } = {}) {
+function request(port, pathname, { token, referer, hostname, method = 'GET', body, contentType } = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({
       host: '127.0.0.1',
@@ -18,7 +18,7 @@ function request(port, pathname, { token, referer, hostname, method = 'GET', bod
         ...(hostname ? { host: `${hostname}:${port}` } : {}),
         ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(referer ? { referer } : {}),
-        ...(body ? { 'content-type': 'application/json' } : {}),
+        ...(body ? { 'content-type': contentType || 'application/json' } : {}),
       },
     }, (res) => {
       let data = '';
@@ -27,7 +27,7 @@ function request(port, pathname, { token, referer, hostname, method = 'GET', bod
       res.on('end', () => resolve({ status: res.statusCode, body: data }));
     });
     req.on('error', reject);
-    if (body) req.write(JSON.stringify(body));
+    if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body));
     req.end();
   });
 }
@@ -107,4 +107,20 @@ test('accepts only the loopback bind name and configured browser hostname', asyn
   assert.equal((await request(port, '/health')).status, 200);
   assert.equal((await request(port, '/health', { hostname: 'compare.homelab' })).status, 200);
   assert.equal((await request(port, '/health', { hostname: 'attacker.example' })).status, 421);
+});
+
+test('rejects oversized note payloads with a bounded response', async (t) => {
+  const { config, session } = fixture();
+  const server = createServer(config, null, session);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const port = server.address().port;
+
+  const response = await request(port, '/api/v1/notes', {
+    token: session.token,
+    method: 'POST',
+    body: JSON.stringify({ op: 'add', text: 'x'.repeat(1_000_001) }),
+  });
+  assert.equal(response.status, 413);
+  assert.deepEqual(JSON.parse(response.body), { error: 'request body too large' });
 });

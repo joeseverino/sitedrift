@@ -116,7 +116,7 @@ export function createServer(config, tls, session, { control = true, side: frame
             const list = notes.applyOp(op);
             json(res, 200, { notes: list, revision: notesRevision(list) });
           } catch (error) {
-            json(res, 400, { error: error.message });
+            json(res, error.statusCode || 400, { error: error.message });
           }
         }
       } else {

@@ -30,6 +30,7 @@
     const scrollFrames = { dev: 0, live: 0 };
     const settleTimers = { dev: [], live: [] };
     const frameState = { dev: { y: 0, max: 0 }, live: { y: 0, max: 0 } };
+    const frameReady = { dev: false, live: false };
     let order = params.get('swap') === '1' ? ['live', 'dev'] : ['dev', 'live'];
     let syncScroll = queryOrStoredBool('scroll', 'site-compare-scroll', !!config.hosted);
     let scrollMode = params.get('scrollMode') || localStorage.getItem('site-compare-scroll-mode') || 'exact';
@@ -118,7 +119,11 @@
       image.src = candidates[0];
     }
     function framePost(side, type, data = {}) {
-      frame(side).contentWindow?.postMessage(
+      const target = frame(side);
+      // `iframe.src` changes before its browsing context finishes navigating,
+      // so only send after the injected bridge explicitly reports readiness.
+      if (!frameReady[side]) return;
+      target.contentWindow?.postMessage(
         { source: 'sitedrift-parent', side, type, ...data },
         config.hosted ? '*' : config.frameOrigins[side],
       );
@@ -533,6 +538,8 @@
       const route = normalizeRoute(value);
       routeInput.value = route;
       updateLabels(route);
+      frameReady.dev = false;
+      frameReady.live = false;
       frame('dev').src = proxied('dev', route);
       frame('live').src = proxied('live', route);
       const url = new URL(location.href);
@@ -616,12 +623,6 @@
       scrollOwner = side;
     }
 
-    for (const side of ['dev', 'live']) {
-      frame(side).addEventListener('load', () => {
-        applyFrameSettings(side);
-      });
-    }
-
     function runFrameKey(key, side, message) {
       const lower = String(key).toLowerCase();
       if (lower === 'r') document.querySelector('[data-action="reload"]').click();
@@ -655,6 +656,7 @@
         || message.source !== 'sitedrift-frame'
         || event.source !== frame(side).contentWindow) return;
       if (message.type === 'ready') {
+        frameReady[side] = true;
         renderMetadata(side, message);
         fetchStatus(side, message.route || '/');
         applyFrameSettings(side);
@@ -939,6 +941,8 @@
     }
 
     const dockButton = document.querySelector('[data-action="notes-dock"]');
+    const notesButtons = [...document.querySelectorAll('[data-action="notes"]')];
+    let notesTrigger = null;
     function notesDocked() {
       return dockMode && innerWidth > 600;
     }
@@ -948,20 +952,27 @@
       dockButton.classList.toggle('active', dockMode);
       dockButton.setAttribute('aria-pressed', dockMode ? 'true' : 'false');
     }
-    function setNotesOpen(value) {
+    function setNotesOpen(value, { restoreFocus = true } = {}) {
       notesOpen = value;
       notesDrawer.classList.toggle('open', notesOpen);
+      notesDrawer.toggleAttribute('inert', !notesOpen);
+      notesDrawer.setAttribute('aria-hidden', notesOpen ? 'false' : 'true');
+      for (const button of notesButtons) button.setAttribute('aria-expanded', notesOpen ? 'true' : 'false');
       setUrlParam('notes', notesOpen ? '1' : '0');
       applyDock();
       if (notesOpen) noteInput.focus();
+      else if (restoreFocus && notesTrigger?.isConnected) notesTrigger.focus();
     }
     dockButton.addEventListener('click', () => {
       dockMode = !dockMode;
       saveBool('dock', 'site-compare-dock', dockMode);
       applyDock();
     });
-    for (const button of document.querySelectorAll('[data-action="notes"]')) {
-      button.addEventListener('click', () => setNotesOpen(!notesOpen));
+    for (const button of notesButtons) {
+      button.addEventListener('click', () => {
+        notesTrigger = button;
+        setNotesOpen(!notesOpen);
+      });
     }
     document.querySelector('[data-action="notes-close"]').addEventListener('click', () => setNotesOpen(false));
     addEventListener('keydown', (event) => {
@@ -1113,7 +1124,7 @@
         hideStatusPopover();
       }
       if (notesOpen && !notesDocked() && !event.target.closest('.review-drawer') && !event.target.closest('[data-action="notes"]')) {
-        setNotesOpen(false);
+        setNotesOpen(false, { restoreFocus: false });
       }
     });
     document.addEventListener('pointerup', (event) => {
@@ -1153,7 +1164,7 @@
     app.dataset.focus = focusSide;
     setOverlayAmount(overlayAmount);
     renderSettings();
-    notesDrawer.classList.toggle('open', notesOpen);
+    setNotesOpen(notesOpen, { restoreFocus: false });
     applyDock();
     renderNotes();
     autosizeNote();
