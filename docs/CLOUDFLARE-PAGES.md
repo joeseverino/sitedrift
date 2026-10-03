@@ -263,4 +263,4 @@ test ! -e dist/__sitedrift
 - Viewer pages no longer contain `window.__SITEDRIFT_CONFIG__` or an inline
   bridge script, so scripts that matched them can go.
 - `404.html` is no longer wrapped.
-- Node 22 or newer is required to run the CLI.
+- Node 24 or newer is required to run the CLI.

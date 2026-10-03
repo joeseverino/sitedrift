@@ -16,7 +16,7 @@ against your dev server, or let it wrap every Cloudflare preview deployment.
 
 ## Quick start
 
-No install, run it with `npx` (Node 22 or newer):
+No install, run it with `npx` (Node 24 or newer):
 
 ```bash
 npx sitedrift /pricing \
