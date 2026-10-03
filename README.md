@@ -1,9 +1,10 @@
 # sitedrift
 
-**Catch the drift between dev and live.** A zero-build, zero-dependency dev tool
-that frames your local site and production **side-by-side on the same route**,
-locked to the same scroll — then overlays them in `difference` mode so the only
-things that light up are the pixels that actually changed.
+**Catch the drift between dev and live.** A zero-build, zero-dependency review
+tool that frames a development build and production **side by side on the same
+route**, locked to the same scroll, then overlays them in `difference` mode so
+the only things that light up are the pixels that changed. Run it locally
+against your dev server, or let it wrap every Cloudflare preview deployment.
 
 <p align="center">
   <img src="docs/images/sitedrift-split.jpg" alt="sitedrift comparing a redesigned local product page with production" width="100%">
@@ -15,7 +16,7 @@ things that light up are the pixels that actually changed.
 
 ## Quick start
 
-No install — run it with `npx` (needs Node ≥ 18):
+No install, run it with `npx` (Node 22 or newer):
 
 ```bash
 npx sitedrift /pricing \
@@ -55,12 +56,14 @@ For a project you use repeatedly, add `sitedrift.config.json`:
 ```
 
 Configuration precedence is **flag > environment > project file > default**.
-The file is discovered from the current directory upward; `--config <file>`
-selects one explicitly.
+The file is discovered from the current directory upward (`sitedrift.config.json`,
+`.sitedriftrc.json`, or a `"sitedrift"` key in `package.json`); `--config <file>`
+selects one explicitly. The same file can hold the hosted-preview keys
+(`dir`, `productionBranch`, `nonce`), so `sitedrift cloudflare` needs no flags.
 
 ### HTTPS
 
-The default (`http://127.0.0.1`) just works — loopback is a browser "secure
+The default (`http://127.0.0.1`) just works: loopback is a browser "secure
 context", so you usually need nothing. When you do want HTTPS:
 
 ```bash
@@ -69,77 +72,65 @@ sitedrift --https         # serve over HTTPS from then on
 ```
 
 `--setup-https` uses [mkcert](https://github.com/FiloSottile/mkcert) if it's
-installed — that gives a **locally-trusted cert with zero browser warnings**. If
+installed, which gives a **locally trusted cert with no browser warnings**. If
 mkcert isn't found it falls back to an `openssl` self-signed cert and prints the
 one command to trust it on your OS. Already have a cert? Skip all of this and
 pass `--cert <file> --key <file>`.
 
-### Cloudflare preview deployments
+### Hosted previews on Cloudflare
 
-Turn every non-production Cloudflare Pages deployment into a compact sitedrift
-review URL. The deployment opens its own preview in DEV Solo mode and can switch
-to Split, Overlay, or Diff against the configured production site.
+Every non-production Cloudflare Pages (or Workers) deployment can open as a
+sitedrift review of itself against production. The preview is DEV, your
+production site is LIVE, and the viewer starts in Solo with one click to Split,
+Overlay, or Diff.
 
-Install sitedrift, then let `init` scaffold the integration:
+Three steps for an Astro, Vite, Eleventy, or plain static site on Pages:
 
-```bash
-npm install --save-dev sitedrift@latest
-npx sitedrift cloudflare init --live https://example.com
-```
+1. `npm install --save-dev sitedrift`
+2. `npx sitedrift cloudflare init --live https://example.com`. This writes
+   `functions/__sitedrift/[[path]].ts`, a one-line Pages Function:
 
-`init` writes the scoped Pages Function (`functions/__sitedrift/[[path]].ts`),
-detects your build output directory, and prints the exact build line to paste
-after your framework build:
+   ```ts
+   export { onRequest } from 'sitedrift/cloudflare';
+   ```
 
-```json
-{
-  "scripts": {
-    "build": "astro build && sitedrift cloudflare --dir dist --live https://example.com"
-  }
-}
-```
+3. Run the wrapper after your framework build:
 
-(`--dir` is auto-detected at build time, so the wrapper also works as just
-`sitedrift cloudflare --live https://example.com`.) On Cloudflare Pages, the
-wrapper activates only when `CF_PAGES=1` and `CF_PAGES_BRANCH` is not `main`.
-Production builds are left unchanged. Use `--production-branch <name>` when
-production is another branch.
+   ```json
+   { "scripts": { "build": "astro build && sitedrift cloudflare --live https://example.com" } }
+   ```
 
-Hosted proxies are read-only (`GET`/`HEAD`) and fixed to the configured live
-origin. Frames run the compared site's scripts so interactive previews behave
-like the deployment; only enable the addon for preview code you trust. Review notes stay in that
-browser's `localStorage`; they are not sent to an API, shared with agents, or
-written to disk. Existing application Functions keep their original routes.
+Push a branch. Production builds (`main`, or `--production-branch`) are left
+byte-for-byte unchanged, and the Function answers 404 there. No dashboard
+settings, bindings, or secrets are needed. Workers with static assets,
+strict-CSP sites, and the full option list are covered in the
+[hosted preview guide](docs/CLOUDFLARE-PAGES.md).
 
-That is two project changes and requires no Cloudflare dashboard settings or
-bindings. See the [complete Cloudflare Pages guide](docs/CLOUDFLARE-PAGES.md)
-for framework examples, the production guard, security details, and a CI check.
+What the hosted proxy does and does not do:
 
-### A real Pages deployment
+- It owns only `/__sitedrift/*`, accepts only `GET` and `HEAD`, and fetches
+  LIVE from the one configured origin.
+- Production sees only `accept`, `accept-language`, `user-agent`,
+  `if-none-match`, `if-modified-since`, and `range`. Cookies (including
+  Cloudflare Access's `CF_Authorization`), `authorization`, and
+  `cf-access-client-*` are never forwarded, and LIVE's `set-cookie` is dropped.
+- It strips upstream CSP and framing headers so LIVE can be framed, then puts
+  back `X-Frame-Options: SAMEORIGIN`, `nosniff`, `Referrer-Policy`, COOP, and
+  CORP.
+- Frames run each site's own scripts on the preview origin with
+  `allow-scripts allow-same-origin`. On one origin that sandbox is **not
+  isolation**: a framed page can reach the viewer and the other frame. Use the
+  addon only for code you would already run on that preview.
+- Review notes stay in the browser's `localStorage`.
 
-This is the same integration running on
-[`jseverino.com`](https://github.com/joeseverino/jseverino.com). A GitHub branch
-push created an ordinary Cloudflare Pages preview tied to one repository,
-branch, commit, and immutable deployment URL:
+A real Pages build: the normal Cloudflare pipeline built 83 pages, the
+installed dependency wrapped them, and the deployment opened as a review.
 
-[![Cloudflare Pages deployment details for a sitedrift preview](docs/images/cloudflare-deployment.jpg)](https://6ef83545.jseverino.pages.dev/)
-
-The existing Cloudflare build generated 83 static pages, then the installed
-sitedrift dependency wrapped those pages before Cloudflare uploaded the assets
-and scoped Function. There was no separate deployment service or dashboard
-configuration:
+![Cloudflare Pages deployment details for a sitedrift preview](docs/images/cloudflare-deployment.jpg)
 
 ![Cloudflare build log showing sitedrift wrapping 83 HTML files](docs/images/cloudflare-build-log.jpg)
 
-Opening that immutable deployment produces the review UI. DEV is a temporary
-red-brand branch generated with
-[`branding-engine`](https://github.com/joeseverino/branding-engine); LIVE is the
-unchanged navy production site:
-
-[![Cloudflare preview comparing red DEV with navy LIVE](docs/images/cloudflare-preview-result.jpg)](https://6ef83545.jseverino.pages.dev/)
-
-The source branch was later restored to navy, while the immutable deployment
-remains a reproducible artifact of the exact reviewed commit.
+![Cloudflare preview comparing a red DEV branch with the navy LIVE site](docs/images/cloudflare-preview-result.jpg)
 
 ---
 
@@ -181,27 +172,26 @@ npm run docs:screenshots
 
 ## What it does
 
-- **One view switch** — Split (divider) · Solo (one pane, Swap flips) · Overlay
+- **One view switch:** Split (divider) · Solo (one pane, Swap flips) · Overlay
   (stacked). In Overlay an opacity slider blends the panes and **Diff**
   (`mix-blend-mode: difference`) lights up only the changed pixels. Overlay
   force-locks scrolling so the panes can't drift. Keys: `O` overlay, `D` diff.
-- **Locked scrolling** with one controller (exact pixel or proportional) — no
-  duplicate scrollbars, no bounce. An internal link click mirrors to both panes.
-- **Metadata diff + response details** — title / description / canonical
+- **Locked scrolling** with one controller (exact pixel or proportional), with
+  no duplicate scrollbars and no bounce. An internal link click mirrors to both panes.
+- **Metadata diff and response details:** title / description / canonical
   compared across sides (`≠ meta`). Each `200/3xx/4xx/5xx/ERR` badge shows the
   response time on hover; click it for DEV/LIVE response, DOM-ready, load,
   transfer, headers, and deltas.
-- **SEO panel** — Google-style snippet preview + a ~13-point checklist per pane
+- **SEO panel:** Google-style snippet preview + a ~13-point checklist per pane
   (title/description length, single H1, canonical, viewport, lang, Open Graph,
   noindex, image alt…), with a flag showing how many checks fail.
-- **Review notes as a shared channel** — author/route/side-tagged notes in a JSON
+- **Review notes as a shared channel:** author/route/side-tagged notes in a JSON
   file the viewer polls every 4s, so a teammate or an AI coding session can leave
   notes that appear live. Click a note to jump to its route, copy a per-note
   deep link, dock or float the drawer, and **Send to vault** or export Markdown.
 - **No runtime dependencies.** Node standard library only.
-- **Deploy-preview mode for Cloudflare Pages.** Preview branches can carry the
-  compact comparison toolbar without changing production output or application
-  API routes.
+- **Hosted previews on Cloudflare Pages and Workers.** Preview branches open as
+  a review without changing production output or application routes.
 
 ### Keyboard
 
@@ -232,16 +222,16 @@ Every option is a CLI flag, and also reads a `SITEDRIFT_<NAME>` env var.
 | `-p, --port <n>` | `SITEDRIFT_PORT` | `4178` | Listen port. |
 | `--host <addr>` | `SITEDRIFT_HOST` | `127.0.0.1` | Bind address. |
 | `--hostname <name>` | `SITEDRIFT_HOSTNAME` | bind address | Browser-facing local DNS name; the socket remains bound to `--host`. |
-| `-o, --open` | — | off | Open the viewer in your browser. |
-| `--https` | — | off | Serve HTTPS with an auto cert (mkcert if present, else openssl). |
-| `--setup-https` | — | — | One-time: generate + trust a local cert, then exit. |
-| `--http` | — | — | Force plain HTTP (the default; overrides `--https`). |
-| `--cert <file>` / `--key <file>` | `SITEDRIFT_CERT` / `_KEY` | — | Bring your own cert; if both set, serve over HTTPS. |
+| `-o, --open` | - | off | Open the viewer in your browser. |
+| `--https` | - | off | Serve HTTPS with an auto cert (mkcert if present, else openssl). |
+| `--setup-https` | - | - | One-time: generate + trust a local cert, then exit. |
+| `--http` | - | - | Force plain HTTP (the default; overrides `--https`). |
+| `--cert <file>` / `--key <file>` | `SITEDRIFT_CERT` / `_KEY` | - | Bring your own cert; if both set, serve over HTTPS. |
 | `--notes <file>` | `SITEDRIFT_NOTES` | `$TMPDIR/sitedrift-notes.json` | Shared review-notes file. |
-| `--brand <text>` | `SITEDRIFT_BRAND` | — | Strip `\| <text>` from titles in pane headers. |
+| `--brand <text>` | `SITEDRIFT_BRAND` | - | Strip `\| <text>` from titles in pane headers. |
 | `--author <name>` | `SITEDRIFT_AUTHOR` | `you` | Byline for notes added in the viewer. |
-| `--vault <dir>` | `SITEDRIFT_VAULT` | — | Enable **Send to vault** (writes the review markdown here). |
-| `--config <file>` | — | discovered | Read project configuration from JSON. |
+| `--vault <dir>` | `SITEDRIFT_VAULT` | - | Enable **Send to vault** (writes the review markdown here). |
+| `--config <file>` | - | discovered | Read project configuration from JSON. |
 
 A positional `[path]` (e.g. `sitedrift /pricing`) sets the initial route.
 `-h, --help` and `-v, --version` do what you'd expect.
@@ -333,7 +323,7 @@ query string, so a link reproduces the exact view.
 
 ---
 
-## Security — local development only
+## Security: local mode
 
 The proxy strips `Content-Security-Policy`, `X-Frame-Options`, and the
 Cross-Origin-{Embedder,Opener,Resource}-Policy headers so production can be
@@ -344,12 +334,29 @@ framed next to dev.
   and `--port + 2`, so neither page can inspect the other.
 - Framed pages communicate through a narrow `postMessage` bridge and cannot
   access the viewer DOM, bearer token, notes API, or vault endpoint.
+- The LIVE proxy forwards only content-negotiation headers and only `GET` and
+  `HEAD`, so localhost cookies never reach production. DEV, your own server,
+  gets the full request.
 - Treat the notes file as plaintext shared scratch space.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| DEV pane shows `Could not load ...` | Start your dev server, or point `--dev` at the port it uses. |
+| LIVE pane is blank or redirects away | Production redirects to another origin (`www.` or apex). Set `--live` to the final origin. |
+| A logged-in production page shows logged out | Expected. LIVE never receives your cookies. |
+| `Port must be ...` | sitedrift uses `--port` and the next two ports; pick a free range. |
+| Assets missing in one pane | A script builds the URL at runtime. See Limitations. |
+
+Hosted preview problems are covered in the
+[guide's troubleshooting table](docs/CLOUDFLARE-PAGES.md#troubleshooting).
 
 ## Development
 
 ```bash
 npm test
+npm run typecheck
 npm run test:e2e:visual
 npm run test:e2e:visual:update   # intentionally accept visual changes
 ```
@@ -360,19 +367,20 @@ for desktop split, narrow Solo, difference overlay, and the notes drawer.
 ## Limitations
 
 - **URL rewriting is regex-based**, tuned for static sites (e.g. Astro builds).
-  It rewrites root-relative `href`/`src`/`srcset`/`url(...)` and Vite/`_astro`
-  paths, but won't catch URLs built in JS (`fetch`, dynamic `import`, import
-  maps). SPAs with client-side absolute fetches may need extra rules.
+  It rewrites root-relative `href`/`src`/`srcset`/`url(...)`, Vite/`_astro`
+  paths, and Vite's dynamic-import preload list, but won't catch other URLs
+  built in JS (`fetch('/api')`, import maps). SPAs with client-side absolute fetches may need extra rules.
 - Designed for two origins of the *same* site, not arbitrary cross-site diffing.
 
 ---
 
 ## Docs
 
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internals, invariants, and the
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): internals, invariants, and the
   module map.
-- [`docs/CLOUDFLARE-PAGES.md`](docs/CLOUDFLARE-PAGES.md) — one-command hosted
-  preview setup, production guard, security model, and a real deployment.
+- [`docs/CLOUDFLARE-PAGES.md`](docs/CLOUDFLARE-PAGES.md): hosted previews on
+  Pages and Workers, strict CSP, options, security model, troubleshooting.
+- [`CHANGELOG.md`](CHANGELOG.md): release notes and upgrade steps.
 
 ## Credits
 

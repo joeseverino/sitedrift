@@ -16,3 +16,11 @@ test('hosted frames allow same-origin styling and deployed interactions', () => 
   assert.match(source, /site-compare-scroll', !!config\.hosted/);
   assert.match(source, /site-compare-mirror', !!config\.hosted/);
 });
+
+test('Solo lets only the visible pane drive scrolling', () => {
+  const source = fs.readFileSync(new URL('../assets/viewer.js', import.meta.url), 'utf8');
+  assert.match(source, /if \(viewMode !== 'solo'\) syncFrom\(side\);/);
+  assert.match(source, /leavingSolo && linked\(\)/);
+  const css = fs.readFileSync(new URL('../assets/viewer.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /&:first-child \{ border-right/);
+});

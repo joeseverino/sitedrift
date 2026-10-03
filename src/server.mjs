@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 import { send, readBody } from './http.mjs';
 import { createNotes, notesRevision } from './notes.mjs';
-import { createProxy } from './proxy.mjs';
+import { BRIDGE_PATH, createProxy } from './proxy.mjs';
 import { assets, renderViewer, VIEWER_VERSION } from './viewer.mjs';
 
 function sendAsset(res, body, type) {
@@ -30,6 +30,12 @@ function authorized(req, session) {
   }
 }
 
+/**
+ * @param {any} config
+ * @param {any} tls
+ * @param {any} session
+ * @param {{ control?: boolean, side?: 'dev' | 'live' }} [options]
+ */
 export function createServer(config, tls, session, { control = true, side: frameSide } = {}) {
   const { devBase, liveBase, vaultDir } = config;
   const notes = createNotes(config);
@@ -48,6 +54,11 @@ export function createServer(config, tls, session, { control = true, side: frame
     }
     const requestUrl = new URL(req.url || '/', `http://${config.host}:${config.port}`);
     const { pathname } = requestUrl;
+
+    if (pathname === BRIDGE_PATH) {
+      sendAsset(res, assets.bridge, 'text/javascript; charset=utf-8');
+      return;
+    }
 
     const isNotes = pathname === '/notes' || pathname === '/api/v1/notes';
     const isSave = pathname === '/notes/save' || pathname === '/api/v1/notes/save';

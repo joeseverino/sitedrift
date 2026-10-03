@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
+
+import { readProjectConfig } from './config.mjs';
 
 // Short flags and the boolean flags that never consume the next argument.
 const ALIASES = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'version' };
 const BOOLEANS = new Set(['open', 'http', 'https', 'setup-https', 'help', 'version', 'js']);
 const VALUE_FLAGS = new Set([
   'dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author',
-  'vault', 'config', 'route', 'side', 'dir', 'production-branch',
+  'vault', 'config', 'route', 'side', 'dir', 'production-branch', 'nonce',
 ]);
 const KNOWN_FLAGS = new Set([...BOOLEANS, ...VALUE_FLAGS]);
-const CONFIG_NAMES = ['sitedrift.config.json', '.sitedriftrc.json'];
 
 export function parseArgs(argv) {
   const opts = {};
@@ -34,37 +34,6 @@ export function parseArgs(argv) {
     opts[name] = value;
   }
   return { opts, positionals };
-}
-
-function findConfigFile(start = process.cwd()) {
-  let dir = path.resolve(start);
-  while (true) {
-    for (const name of CONFIG_NAMES) {
-      const file = path.join(dir, name);
-      if (fs.existsSync(file)) return file;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) return null;
-    dir = parent;
-  }
-}
-
-function readConfigFile(explicit) {
-  const file = explicit ? path.resolve(explicit) : findConfigFile();
-  if (!file) return {};
-  let value;
-  try {
-    value = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    throw new Error(`Could not read config ${file}: ${error.message}`);
-  }
-  if (!value || Array.isArray(value) || typeof value !== 'object') {
-    throw new Error(`Config ${file} must contain a JSON object.`);
-  }
-  const allowed = new Set(['dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author', 'vault', 'https', 'open']);
-  const unknown = Object.keys(value).filter((key) => !allowed.has(key));
-  if (unknown.length) throw new Error(`Unknown config key${unknown.length === 1 ? '' : 's'}: ${unknown.join(', ')}`);
-  return value;
 }
 
 // SITEDRIFT_<NAME> is the public env var; SITE_COMPARE_<NAME> is the legacy name
@@ -105,7 +74,7 @@ export function readVersion() {
 }
 
 export function printHelp() {
-  console.log(`sitedrift — frame local dev against production, side-by-side on the same route.
+  console.log(`sitedrift: frame local dev against production, side by side on the same route.
 
 Usage:
   sitedrift [path] [options]
@@ -113,8 +82,8 @@ Usage:
   sitedrift status
   sitedrift context
   sitedrift mcp
-  sitedrift cloudflare init --live https://example.com   (scaffold the Pages addon)
-  sitedrift cloudflare --live https://example.com        (wrap a build; --dir auto-detected)
+  sitedrift cloudflare init --live https://example.com   (scaffold the Pages Function)
+  sitedrift cloudflare --live https://example.com        (wrap a preview build)
   sitedrift notes list
   sitedrift notes add <text> [--route /path] [--side dev|live] [--author name]
   sitedrift notes resolve|reopen|remove <id>
@@ -140,15 +109,23 @@ Options:
   -h, --help          Show this help
   -v, --version       Print version
 
+Cloudflare options (sitedrift cloudflare):
+      --live <url>               Production origin (HTTPS)       [required]
+      --dir <dir>                Build output                    [auto-detected]
+      --production-branch <name> Branch left untouched           [default main]
+      --nonce <value>            CSP nonce or placeholder stamped on every tag sitedrift writes
+      --brand <text>             Strip "| <text>" from titles
+      --js                       init: write [[path]].js instead of .ts
+
 Every option also reads SITEDRIFT_<NAME> (e.g. SITEDRIFT_DEV). Binds to
-127.0.0.1 by default — it strips framing/isolation headers, so never expose it
+127.0.0.1 by default. It strips framing and isolation headers, so never expose it
 publicly. See https://github.com/joeseverino/sitedrift`);
 }
 
 export function resolveConfig(argv = process.argv.slice(2), { requireLive = true } = {}) {
   const { opts, positionals } = parseArgs(argv);
   if (positionals.length > 1) throw new Error(`Unexpected argument: ${positionals[1]}`);
-  const fileConfig = readConfigFile(opts.config);
+  const fileConfig = readProjectConfig({ explicit: opts.config });
   const port = Number(pick(opts, fileConfig, 'port', 'PORT', 4178));
   if (!Number.isInteger(port) || port < 1 || port > 65533) {
     throw new Error('Port must be an integer from 1 to 65533 (the next two ports isolate DEV and LIVE).');
@@ -195,6 +172,30 @@ export function resolveConfig(argv = process.argv.slice(2), { requireLive = true
   };
 }
 
+/**
+ * Fills a parsed `cloudflare` command from the project config. Flags win.
+ * @param {{ action: string, dir: string, live: string, brand: string, productionBranch: string, nonce: string, js: boolean, config?: string }} command
+ * @param {{ cwd?: string }} [options]
+ */
+export function resolveCloudflareCommand(command, { cwd = process.cwd() } = {}) {
+  const file = readProjectConfig({ explicit: command.config, cwd });
+  /** @param {string} key */
+  const text = (key) => (typeof file[key] === 'string' ? /** @type {string} */ (file[key]) : '');
+  const resolved = {
+    ...command,
+    dir: command.dir || text('dir'),
+    live: command.live || text('live'),
+    brand: command.brand || text('brand'),
+    productionBranch: command.productionBranch || text('productionBranch') || 'main',
+    nonce: command.nonce || text('nonce'),
+  };
+  // `init` only scaffolds the Function file, so --live is optional there.
+  if (resolved.action === 'wrap' && !resolved.live) {
+    throw new Error('sitedrift cloudflare requires --live (or "live" in sitedrift.config.json).');
+  }
+  return resolved;
+}
+
 export function parseCommand(argv = process.argv.slice(2)) {
   const name = argv[0];
   if (!['status', 'context', 'notes', 'mcp', 'cloudflare'].includes(name)) return null;
@@ -203,10 +204,8 @@ export function parseCommand(argv = process.argv.slice(2)) {
     const action = positionals[0] || 'wrap';
     if (positionals.length > 1) throw new Error(`Unexpected argument: ${positionals[1]}`);
     if (action !== 'wrap' && action !== 'init') {
-      throw new Error('Usage: sitedrift cloudflare [init] --live <url> [--dir <out>] [--js]');
+      throw new Error('Usage: sitedrift cloudflare [init] --live <url> [--dir <out>] [--nonce <value>] [--js]');
     }
-    // `init` only scaffolds the Function file, so --live is optional there.
-    if (action === 'wrap' && !opts.live) throw new Error('sitedrift cloudflare requires --live.');
     return {
       command: {
         name,
@@ -214,8 +213,10 @@ export function parseCommand(argv = process.argv.slice(2)) {
         dir: opts.dir || '',
         live: opts.live || '',
         brand: opts.brand || '',
-        productionBranch: opts['production-branch'] || 'main',
+        productionBranch: opts['production-branch'] || '',
+        nonce: opts.nonce || '',
         js: !!opts.js,
+        config: opts.config,
       },
       argv: [],
     };

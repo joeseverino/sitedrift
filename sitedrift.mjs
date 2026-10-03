@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseCommand, resolveConfig, printHelp, readVersion } from './src/cli.mjs';
+import { parseCommand, resolveCloudflareCommand, resolveConfig, printHelp, readVersion } from './src/cli.mjs';
 import { createServer } from './src/server.mjs';
 import { resolveTls, setupHttps } from './src/tls.mjs';
 import { openBrowser } from './src/browser.mjs';
@@ -8,10 +8,11 @@ import { createSession, removeSession, writeSession } from './src/session.mjs';
 import { runMcpServer } from './src/mcp.mjs';
 import { installCloudflarePreview, scaffoldCloudflarePreview } from './src/cloudflare.mjs';
 
+let parsed;
 let command;
 let config;
 try {
-  const parsed = parseCommand();
+  parsed = parseCommand();
   command = parsed?.command;
 } catch (error) {
   console.error(`sitedrift: ${error.message}`);
@@ -22,19 +23,22 @@ if (command?.name === 'mcp') {
   runMcpServer();
 } else if (command?.name === 'cloudflare') {
   try {
-    if (command.action === 'init') {
-      const result = scaffoldCloudflarePreview(command);
+    const options = resolveCloudflareCommand(command);
+    if (options.action === 'init') {
+      const result = scaffoldCloudflarePreview(options);
       console.log(result.created
         ? `sitedrift: created ${result.functionFile}`
-        : `sitedrift: ${result.functionFile} already exists — leaving it as is`);
+        : `sitedrift: ${result.functionFile} already exists, leaving it as is`);
       console.log('Next, add this to your package.json "build" script, after the framework build:');
       console.log(`    ${result.buildLine}`);
       console.log('Then commit both changes and push a preview branch.');
     } else {
-      const result = installCloudflarePreview(command);
-      console.log(result.installed
-        ? `sitedrift: wrapped ${result.files} HTML files for Cloudflare preview ${result.branch}`
-        : `sitedrift: unchanged (${result.reason})`);
+      const result = installCloudflarePreview(options);
+      if (result.installed === true) {
+        console.log(`sitedrift: wrapped ${result.files} HTML files for Cloudflare preview ${result.branch}`);
+      } else if (result.installed === false) {
+        console.log(`sitedrift: unchanged (${result.reason})`);
+      }
     }
   } catch (error) {
     console.error(`sitedrift: ${error.message}`);
@@ -42,7 +46,6 @@ if (command?.name === 'mcp') {
   }
 } else {
   try {
-    const parsed = parseCommand();
     config = resolveConfig(parsed?.argv ?? process.argv.slice(2), { requireLive: !command });
   } catch (error) {
     console.error(`sitedrift: ${error.message}`);

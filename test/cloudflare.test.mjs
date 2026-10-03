@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { installCloudflarePreview, scaffoldCloudflarePreview } from '../src/cloudflare.mjs';
+import { FUNCTION_SOURCE, installCloudflarePreview, scaffoldCloudflarePreview } from '../src/cloudflare.mjs';
 import { onRequest } from '../src/cloudflare-runtime.mjs';
 
 function fixture() {
@@ -71,15 +71,12 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
   const response = await onRequest(context);
   const body = await response.text();
   assert.equal(response.status, 200);
-  assert.equal(response.headers.has('x-frame-options'), false);
+  assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN');
   assert.match(response.headers.get('content-type'), /text\/html/);
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.match(body, /src="\/__sitedrift\/dev\/image.png"/);
-  assert.match(body, /sitedrift-frame/);
-  assert.match(body, /send\('dismiss'\)/);
-  assert.match(body, /transferSize/);
-  assert.match(body, /image\/svg\+xml/);
-  assert.match(body, /\\.svg/);
+  assert.match(body, /<script src="\/__sitedrift\/assets\/bridge.js" data-side="dev" data-prefix="\/__sitedrift\/dev"><\/script><\/head>/);
+  assert.doesNotMatch(body, /<script>/i);
 });
 
 test('scaffolds the scoped Function file and is idempotent', () => {
@@ -89,7 +86,7 @@ test('scaffolds the scoped Function file and is idempotent', () => {
   assert.equal(first.functionFile, path.join('functions', '__sitedrift', '[[path]].ts'));
   assert.equal(
     fs.readFileSync(path.join(cwd, first.functionFile), 'utf8'),
-    "export { onRequest } from 'sitedrift/cloudflare';\n",
+    FUNCTION_SOURCE,
   );
   assert.match(first.buildLine, /--live https:\/\/example\.com/);
 

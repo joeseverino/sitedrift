@@ -68,10 +68,10 @@ only when the host cannot run MCP.
 Hosted Cloudflare preview deployments are a different mode: their notes are
 browser-local and intentionally unavailable to MCP. Use browser inspection for
 those URLs. Do not claim that a hosted note was shared with an agent or written
-to the project. Setup is one command (`npx sitedrift cloudflare init --live <url>`,
-which scaffolds the scoped Pages Function and prints the build line to paste),
-documented in `docs/CLOUDFLARE-PAGES.md`; do not instruct users to change
-Cloudflare dashboard settings or bindings.
+to the project. Setup is `npx sitedrift cloudflare init --live <url>` (scaffolds
+the one-line Pages Function and prints the build line to paste), documented in
+`docs/CLOUDFLARE-PAGES.md` along with Workers and strict-CSP (`--nonce`) setups;
+do not instruct users to change Cloudflare dashboard settings or bindings.
 
 ## MCP tools
 
@@ -115,8 +115,10 @@ sitedrift accepts loopback hosts only. The control API uses a random bearer
 token stored in `~/.sitedrift/sessions/<port>.json` with mode `0600`. DEV and
 LIVE render on separate origins. Never expose sitedrift through a public proxy.
 
-The optional Cloudflare Pages addon is intentionally public-preview safe: it is
-installed only on non-production builds, exposes only `/__sitedrift/*`, permits
-only `GET` and `HEAD`, and allowlists one configured live origin. Hosted frames
-execute the compared site's scripts and must be used only with trusted preview
-code. Production output and existing API Functions are unchanged.
+The optional Cloudflare addon is installed only on non-production builds,
+exposes only `/__sitedrift/*`, permits only `GET` and `HEAD`, fetches LIVE from
+one configured origin, and forwards only content-negotiation headers (never
+cookies or Access credentials). Hosted frames are same-origin with
+`allow-scripts allow-same-origin`, which is not isolation: use it only with
+trusted preview code. Production output and existing API Functions are
+unchanged.

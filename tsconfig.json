@@ -1,0 +1,27 @@
+{
+  // Strict check of the published library surface and its declarations.
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": [
+    "src/cloudflare-runtime.mjs",
+    "src/cloudflare.mjs",
+    "src/config.mjs",
+    "src/frame-content.mjs",
+    "src/headers.mjs",
+    "src/index.mjs",
+    "src/proxy.mjs",
+    "src/viewer.mjs",
+    "types/**/*.d.mts",
+    "test/types.test-d.mts"
+  ]
+}

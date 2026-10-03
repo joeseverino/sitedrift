@@ -52,6 +52,7 @@ html, body {
   block-size: 100%;
   margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--text);
 }
@@ -441,6 +442,12 @@ button[data-action="notes"] {
   white-space: nowrap;
 }
 .status-popover-foot dt { margin: 0; }
+.status-popover-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
 
 @media (width <= 600px) {
   .compact-origin { display: none; }
@@ -628,8 +635,6 @@ kbd { padding: 1px 5px; color: #e8ebf0; background: #242932; border: 1px solid #
   min-inline-size: 0;
   overflow: hidden;
   background: #fff;
-
-  &:first-child { border-right: 1px solid var(--line); }
 }
 iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; background: #fff; }
 
@@ -702,7 +707,6 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
 .app.overlay {
   & .stage { grid-template-columns: minmax(0, 1fr); }
   & .pane { position: absolute; inset: 0; }
-  & .pane:first-child { border-right: 0; }
   /* Flex `order` reorders layout but not paint order for absolutely-positioned
      panes, so pin the blended pane on top via z-index — otherwise Diff/opacity
      land on the pane painted underneath and only line up in one swap direction. */
@@ -747,14 +751,14 @@ iframe { display: block; inline-size: 100%; block-size: 100%; border: 0; backgro
   color: var(--text);
   background: var(--panel);
   border-left: 1px solid var(--line);
-  box-shadow: -18px 0 55px rgb(0 0 0 / 60%);
-  transform: translateX(102%);
+  transform: translateX(100%);
   visibility: hidden;
   transition: transform var(--t) var(--ease), visibility 0s linear var(--t);
 
   &.open {
     transform: translateX(0);
     visibility: visible;
+    box-shadow: -18px 0 55px rgb(0 0 0 / 60%);
     transition-delay: 0s;
   }
 }
