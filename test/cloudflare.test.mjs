@@ -76,7 +76,7 @@ test('the edge runtime serves preserved preview HTML through the scoped proxy', 
   assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow');
   assert.match(body, /src="\/__sitedrift\/dev\/image.png"/);
   assert.match(body, /<script src="\/__sitedrift\/assets\/bridge.js" data-side="dev" data-prefix="\/__sitedrift\/dev"><\/script><\/head>/);
-  assert.doesNotMatch(body, /<script>/);
+  assert.doesNotMatch(body, /<script>/i);
 });
 
 test('scaffolds the scoped Function file and is idempotent', () => {

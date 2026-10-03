@@ -49,7 +49,7 @@ test('viewer pages carry config as inert JSON and no inline script', () => {
     const config = html.match(/<script[^>]*type="application\/json" id="sitedrift-config">([^<]*)<\/script>/);
     assert.ok(config, 'config block present');
     assert.equal(typeof JSON.parse(config[1]), 'object');
-    for (const tag of html.match(/<script\b[^>]*>/g)) {
+    for (const tag of html.match(/<script\b[^>]*>/gi)) {
       assert.match(tag, /\bsrc=|type="application\/json"/, tag);
     }
   }

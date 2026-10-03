@@ -241,7 +241,7 @@ test('install stamps the nonce on every viewer script, style, and stylesheet', (
   const dir = site();
   installCloudflarePreview({ dir, live: LIVE, nonce: '__CSP_NONCE__', env: { CF_PAGES: '1', CF_PAGES_BRANCH: 'feature' } });
   const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
-  const tags = html.match(/<(?:script|style)\b[^>]*>|<link rel="stylesheet"[^>]*>/g);
+  const tags = html.match(/<(?:script|style)\b[^>]*>|<link rel="stylesheet"[^>]*>/gi);
   assert.ok(tags.length >= 3);
   for (const tag of tags) assert.match(tag, /nonce="__CSP_NONCE__"/, tag);
   assert.doesNotMatch(html, /__SITEDRIFT_CONFIG__/);
