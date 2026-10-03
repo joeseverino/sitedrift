@@ -18,6 +18,8 @@ jobs:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      # Trusted publishing (OIDC) needs npm 11.5 or newer.
+      - run: npm install --global npm@^11.5.1
       - run: npm ci
       - run: npm run check
       - run: npx playwright install --with-deps chromium

@@ -1,6 +1,6 @@
 {
   "name": "sitedrift",
-  "version": "0.3.11",
+  "version": "0.4.0",
   "description": "Visual review for local and hosted previews: compare DEV and LIVE with Split, Diff, SEO, response deltas, notes, and MCP.",
   "type": "module",
   "bin": {
@@ -11,24 +11,27 @@
     "sitedrift.mjs",
     "sitedrift-mcp.mjs",
     "src/",
+    "types/",
     "assets/viewer.html",
     "assets/viewer.css",
     "assets/viewer.js",
+    "assets/bridge.js",
     "assets/icon.svg",
-    "docs/images/",
     "docs/CLOUDFLARE-PAGES.md",
     "AGENTS.md",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
-    "check": "npm test && npm run check:package",
+    "check": "npm test && npm run typecheck && npm run check:package",
     "check:package": "npm pack --dry-run",
     "start": "node sitedrift.mjs",
-    "test": "for f in sitedrift.mjs src/*.mjs assets/viewer.js test/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
+    "test": "for f in sitedrift.mjs src/*.mjs assets/viewer.js assets/bridge.js test/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.cli.json",
     "test:e2e:visual": "VISUAL=1 playwright test",
     "test:e2e:visual:update": "VISUAL=1 playwright test --update-snapshots",
     "docs:screenshots": "node test/capture-readme.mjs"
@@ -46,7 +49,11 @@
     "proxy",
     "seo",
     "astro",
-    "overlay"
+    "overlay",
+    "cloudflare-pages",
+    "cloudflare-workers",
+    "preview",
+    "csp"
   ],
   "author": "Joe Severino (https://github.com/joeseverino)",
   "license": "MIT",
@@ -59,9 +66,20 @@
     "url": "https://github.com/joeseverino/sitedrift/issues"
   },
   "exports": {
-    "./cloudflare": "./src/cloudflare-runtime.mjs"
+    ".": {
+      "types": "./types/index.d.mts",
+      "default": "./src/index.mjs"
+    },
+    "./cloudflare": {
+      "types": "./types/cloudflare.d.mts",
+      "default": "./src/cloudflare-runtime.mjs"
+    },
+    "./package.json": "./package.json"
   },
+  "types": "./types/index.d.mts",
   "devDependencies": {
-    "@playwright/test": "^1.62.1"
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2"
   }
 }

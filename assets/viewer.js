@@ -1,5 +1,4 @@
-    const config = window.__SITEDRIFT_CONFIG__;
-    delete window.__SITEDRIFT_CONFIG__;
+    const config = JSON.parse(document.getElementById('sitedrift-config')?.textContent || '{}');
     if (config.hosted) {
       config.dev = location.origin;
       config.frameOrigins = { dev: location.origin, live: location.origin };
@@ -214,7 +213,9 @@
         element('strong', '', 'Response details'),
         element('span', 'status-popover-route', routeInput.value || '/'),
       );
-      statusPopover.replaceChildren(head, grid, foot);
+      const note = element('p', 'status-popover-note',
+        'Measured through the sitedrift proxy, in this browser. Both sides carry the same proxy overhead, so compare deltas, not absolute times.');
+      statusPopover.replaceChildren(head, grid, foot, note);
     }
 
     function hideStatusPopover() {
@@ -662,7 +663,9 @@
         applyFrameSettings(side);
       } else if (message.type === 'scroll') {
         frameState[side] = { y: Number(message.y) || 0, max: Number(message.max) || 0 };
-        syncFrom(side);
+        // In Solo only the visible pane leads. The hidden one is aligned when it
+        // is swapped in, so its own scroll events never move the visible page.
+        if (viewMode !== 'solo') syncFrom(side);
       } else if (message.type === 'wheel') {
         const delta = message.mode === 1 ? message.delta * 18
           : message.mode === 2 ? message.delta * message.height : message.delta;
@@ -751,6 +754,7 @@
     // overlay's blend (the slider's far end), toggled within Overlay.
     function setMode(mode) {
       if (!['split', 'solo', 'overlay'].includes(mode)) mode = 'split';
+      const leavingSolo = viewMode === 'solo' && mode !== 'solo';
       viewMode = mode;
       app.classList.toggle('solo', mode === 'solo');
       app.classList.toggle('overlay', mode === 'overlay');
@@ -762,7 +766,8 @@
       applyOrder();
       // Overlay forces scroll-lock, so refresh scrollbar hiding + re-align.
       for (const side of ['dev', 'live']) applyFrameSettings(side);
-      if (stacked()) alignSide(order[1], order[0]);
+      if (leavingSolo && linked()) alignSide(focusSide, focusSide === 'dev' ? 'live' : 'dev');
+      else if (stacked()) alignSide(order[1], order[0]);
     }
     function setOverlayBlend(blend) {
       overlayBlend = blend === 'difference' ? 'difference' : 'opacity';

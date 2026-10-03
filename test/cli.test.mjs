@@ -90,7 +90,9 @@ test('parses the Cloudflare preview command', () => {
     live: 'https://example.test',
     brand: '',
     productionBranch: 'trunk',
+    nonce: '',
     js: false,
+    config: undefined,
   });
 });
 
@@ -106,4 +108,27 @@ test('viewer uses neutral pane identity and current help copy', () => {
   assert.doesNotMatch(viewerScript, /const appIcon/);
   assert.match(viewerHtml, /hosted preview against production/);
   assert.doesNotMatch(viewerHtml, /Local dev and production, locked/);
+});
+
+test('reads project config from package.json and fills the Cloudflare command', async () => {
+  const { resolveCloudflareCommand } = await import('../src/cli.mjs');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'sitedrift-pkg-'));
+  fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({
+    name: 'site',
+    sitedrift: { live: 'https://example.test', dir: 'out', nonce: '__CSP_NONCE__', productionBranch: 'prod' },
+  }));
+  const parsed = parseCommand(['cloudflare']).command;
+  const resolved = resolveCloudflareCommand(parsed, { cwd });
+  assert.equal(resolved.live, 'https://example.test');
+  assert.equal(resolved.dir, 'out');
+  assert.equal(resolved.nonce, '__CSP_NONCE__');
+  assert.equal(resolved.productionBranch, 'prod');
+  const flagged = resolveCloudflareCommand(parseCommand(['cloudflare', '--live', 'https://other.test']).command, { cwd });
+  assert.equal(flagged.live, 'https://other.test');
+
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'sitedrift-empty-'));
+  fs.writeFileSync(path.join(empty, 'package.json'), '{"name":"x","sitedrift":{}}');
+  assert.throws(() => resolveCloudflareCommand(parseCommand(['cloudflare']).command, { cwd: empty }), /requires --live/);
+  fs.writeFileSync(path.join(empty, 'package.json'), '{"sitedrift":{"lvie":"x"}}');
+  assert.throws(() => resolveCloudflareCommand(parseCommand(['cloudflare']).command, { cwd: empty }), /Unknown config key/);
 });

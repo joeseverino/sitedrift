@@ -94,6 +94,9 @@ test('frame listener does not expose viewer or control API', async (t) => {
   assert.equal((await request(port, '/')).status, 404);
   assert.equal((await request(port, '/api/v1/session', { token: session.token })).status, 404);
   assert.equal((await request(port, '/__live/')).status, 404);
+  const bridge = await request(port, '/__sitedrift/assets/bridge.js');
+  assert.equal(bridge.status, 200);
+  assert.match(bridge.body, /sitedrift-frame/);
 });
 
 test('accepts only the loopback bind name and configured browser hostname', async (t) => {

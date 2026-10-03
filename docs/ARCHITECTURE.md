@@ -33,15 +33,21 @@ several parts look redundant but are load-bearing.
   | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
   | `src/tls.mjs` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
   | `src/cloudflare.mjs` | preview-only static-build wrapper + `init` scaffold (auto-detects the output dir). |
-  | `src/cloudflare-runtime.mjs` | read-only scoped Pages Function proxy. |
-  | `src/frame-content.mjs` | shared URL rewriting and frame bridge injection. |
+  | `src/cloudflare-runtime.mjs` | `createPreviewHandler`: read-only hosted proxy for Pages Functions and Workers. |
+  | `src/frame-content.mjs` | shared URL rewriting, bridge tag injection, nonce stamping (no Node imports). |
+  | `src/headers.mjs` | shared header policy: LIVE forward allowlist, response strip list, security headers, cache rule (no Node imports). |
+  | `src/config.mjs` | project config discovery (`sitedrift.config.json`, `.sitedriftrc.json`, package.json `"sitedrift"`). |
+  | `src/index.mjs` | the `sitedrift` Node export (build helpers). |
+  | `types/*.d.mts` | published declarations, checked against the JS by `test/types.test-d.mts`. |
   | `src/http.mjs` | `send` / `readBody` helpers. |
   | `src/browser.mjs` | cross-platform `--open`. |
-  | `assets/viewer.{html,css,js}` | the viewer — edited as real HTML/CSS/JS. |
+  | `assets/viewer.{html,css,js}` | the viewer, edited as real HTML/CSS/JS. |
+  | `assets/bridge.js` | the frame bridge, loaded into framed pages as an external script. |
   | `assets/icon.svg` | served at `/icon.svg`, favicon + toolbar mark. |
 
-  The viewer is static except a single `config` object injected as
-  `window.__SITEDRIFT_CONFIG__`. Local mode includes DEV/LIVE, brand/author,
+  The viewer is static except a single `config` object written as inert JSON
+  in `<script type="application/json" id="sitedrift-config">` and read with
+  `JSON.parse`, so the page has no inline executable script. Local mode includes DEV/LIVE, brand/author,
   vault availability, API/token, isolated frame origins, and `hosted: false`;
   hosted mode replaces the control-plane fields with local-notes and initial
   route state. `viewer.css` and `viewer.js` are served as their own cacheable
@@ -120,6 +126,8 @@ back through the correct side's proxy prefix:
 - `srcset="… /…, /…"` → each candidate prefixed
 - `url(/…)` in CSS → `url(/__<side>/…)`
 - Vite/Astro internals: `"/@id/"`, `"/@vite/"`, `"/@fs/"`, `"/_astro/"`
+- JavaScript only: base-relative `"_astro/…"` strings, which Vite's preload
+  helper joins to base `/` for dynamic imports (`__vite__mapDeps`)
 
 **The blind spot, stated plainly:** anything a *script* constructs at runtime —
 `fetch('/api/…')`, dynamic `import('/…')`, import maps, `new URL('/…', …)` — is
@@ -146,23 +154,30 @@ Only with no usable referer does the fallback serve the viewer page.
 ### 3.4 Response handling
 
 `proxy()`:
-- Forwards the request, **deletes `accept-encoding`** (so upstream returns
-  uncompressed text the rewriter can edit) and `connection`.
+- DEV gets the browser's headers minus `host`, `accept-encoding` (so upstream
+  returns text the rewriter can edit), and `connection`; it is the user's own
+  server, so cookies and form posts pass through.
+- LIVE gets only the allowlist in `src/headers.mjs` (`accept`,
+  `accept-language`, `user-agent`, `if-none-match`, `if-modified-since`,
+  `range`) and only `GET`/`HEAD`; anything else is `405`. Localhost cookies
+  never reach production.
 - Strips a fixed set of headers (§7) from the response.
 - Rewrites `Location` on same-origin redirects back into the `/__<side>` space
   so redirects stay inside the comparison.
-- Forces `Cache-Control: no-store` — comparisons must always be fresh.
+- Sets `Cache-Control: no-store` on pages; content-hashed assets (`/_astro/`
+  or an upstream `immutable`) keep their upstream policy.
 
 ---
 
 ## 4. Viewer and frame bridge
 
-The viewer receives one escaped JSON config object, copies it into module
-state, and immediately deletes the global. It includes the control API path,
-session token, and isolated frame origins.
+The viewer parses one escaped JSON config block. It includes the control API
+path, session token, and isolated frame origins.
 
-The viewer cannot read frame DOM. `proxy.mjs` injects a small bridge into HTML
-responses. It sends bounded metadata, SEO checks, navigation, keyboard, and
+The viewer cannot read frame DOM. Both proxies inject one external script tag,
+`<script src="/__sitedrift/assets/bridge.js" data-side data-prefix>`, before
+`</head>`. The bridge reads its side from `document.currentScript`, so it runs
+under a nonce or `'self'` CSP, and with a nonce configured the tag carries it. It sends bounded metadata, SEO checks, navigation, keyboard, and
 scroll messages to the parent. The parent accepts a message only when both
 `event.origin` and `event.source` match the configured frame and iframe.
 
@@ -219,7 +234,10 @@ entering overlay.
 
 Side-by-side views (Split/Solo) scroll **natively** — the bridge does *not*
 intercept the wheel, so trackpad momentum is preserved. Each pane's native
-`scroll` event is mirrored to the other (`syncFrom` → `alignSide`). Overlay is
+`scroll` event is mirrored to the other (`syncFrom` → `alignSide`). Solo is the
+exception: only the visible pane leads, the hidden pane's `scroll` events update
+state but never drive the visible one, and the hidden pane is aligned once when
+it is swapped in or when the layout leaves Solo. Overlay is
 different: the panes are stacked, so there is no second native scroll to mirror
 and pixel-exact lockstep matters for Diff. There the bridge hijacks the wheel
 (`preventDefault` + posts a normalized delta) and the parent drives both panes.
@@ -269,15 +287,21 @@ URL/storage (§8), because they're a multi-writer channel.
 
 ## 7. Header stripping & the security boundary
 
-`proxy()` removes from every upstream response:
+Both proxies remove `STRIP_RESPONSE_HEADERS` (`src/headers.mjs`) from every
+upstream response:
 
 ```
 content-encoding, content-length, transfer-encoding,
 content-security-policy, content-security-policy-report-only,
-x-frame-options,
+x-frame-options, set-cookie,
 cross-origin-embedder-policy, cross-origin-opener-policy,
 cross-origin-resource-policy
 ```
+
+`set-cookie` is dropped so production never sets cookies on the review origin
+(local DEV keeps its own cookies). The hosted handler then restores
+`DEFAULT_SECURITY_HEADERS` (`X-Frame-Options: SAMEORIGIN`, `nosniff`,
+`Referrer-Policy`, COOP, CORP), which still allow the same-origin frame.
 
 - The first three are removed because the body is decoded and rewritten — the
   original framing/length is no longer valid.
@@ -412,7 +436,7 @@ sitedrift/
   src/
     cli.mjs            // arg parse, env resolution, help/version, cleanBase
     server.mjs         // handler routing table, http/https bootstrap
-    proxy.mjs          // targetFor, rewriteRootPaths, proxy(), header strip set
+    proxy.mjs          // targetFor, proxy(), DEV/LIVE request headers
     notes.mjs          // load/save/apply ops, markdown  ← pure, unit-testable
     agent.mjs          // authenticated JSON CLI client
     mcp.mjs            // stdio MCP tools/resources/prompt
@@ -420,14 +444,18 @@ sitedrift/
     viewer.mjs         // loads assets/, injects the per-run config blob
     tls.mjs            // explicit/automatic local TLS
     cloudflare.mjs     // preview build wrapper + init scaffold / output-dir detect
-    cloudflare-runtime.mjs // scoped read-only Pages proxy
-    frame-content.mjs  // shared frame rewriting/bridge injection
+    cloudflare-runtime.mjs // createPreviewHandler (Pages + Workers)
+    frame-content.mjs  // rewriteRootPaths, bridge tag, nonce stamping
+    headers.mjs        // shared header policy
+    config.mjs         // project config discovery
+    index.mjs          // the "sitedrift" Node export
     http.mjs           // send / readBody
     browser.mjs        // cross-platform --open
   assets/
     viewer.html        // head + body markup (placeholders __VERSION__/__CONFIG__)
     viewer.css         // lifted out of the template literal
     viewer.js          // the client bundle (state, scroll, layout, notes, init)
+    bridge.js          // frame bridge, external script in each framed page
     icon.svg
 ```
 

@@ -163,6 +163,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * @param {any} session
+ * @param {{ revision?: string, timeoutMs?: number }} [options]
+ * @param {{ request?: Function, intervalMs?: number }} [deps]
+ */
 export async function watchNotes(
   session,
   { revision, timeoutMs = 25000 } = {},
