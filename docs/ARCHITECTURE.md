@@ -12,38 +12,53 @@ several parts look redundant but are load-bearing.
 
 ## 1. Shape and constraints
 
-- **Zero runtime dependencies, no build step.** Only Node stdlib (`http`,
-  `https`, `fs`, `os`, `child_process`, `url`, `crypto`). This is a hard
-  design constraint — do not add dependencies without a deliberate decision to
-  give that up. There is no bundler: the source ships as-is and `npx sitedrift`
-  runs it directly.
+- **Zero runtime dependencies.** Only Node stdlib (`http`, `https`, `fs`, `os`,
+  `child_process`, `url`, `crypto`). This is a hard design constraint. Do not
+  add dependencies without a deliberate decision to give that up. There is no
+  bundler. The source is strict TypeScript that Node 24 runs unbuilt in the
+  repo (it strips the types), and the published package ships the same modules
+  compiled to ESM with declarations (`npm run build:package`, run by `prepack`).
+  Sources import each other with `.ts` extensions; `tsc` rewrites them to `.js`
+  in the emitted code and `scripts/build-package.ts` rewrites them in the
+  declarations. The public types are the ones in the sources: there are no
+  hand-written declaration files.
 - **Small modules + static assets.** The server is split into focused ES modules
-  under `src/`; the viewer ships as real files under `assets/`:
+  under `src/`; the viewer markup and styles ship as real files under `assets/`,
+  and the two browser scripts are TypeScript under `browser/`:
 
   | File | Responsibility |
   |---|---|
-  | `sitedrift.mjs` | bin entry — resolve config, start server, log, `--open`. |
-  | `src/cli.mjs` | arg parsing, env resolution, `--help`/`--version`. |
-  | `src/server.mjs` | the request handler + http/https server. |
-  | `src/proxy.mjs` | reverse proxy + `rewriteRootPaths` (§3). |
-  | `src/notes.mjs` | the notes store — load/save/markdown/ops (§8). |
-  | `src/agent.mjs` | JSON CLI client for the authenticated control API. |
-  | `src/mcp.mjs` | zero-dependency stdio MCP tools, resources, and prompt. |
-  | `src/session.mjs` | private session token + discovery file lifecycle. |
-  | `src/viewer.mjs` | loads `assets/*`, injects the per-run config blob. |
-  | `src/tls.mjs` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
-  | `src/cloudflare.mjs` | preview-only static-build wrapper + `init` scaffold (auto-detects the output dir). |
-  | `src/cloudflare-runtime.mjs` | `createPreviewHandler`: read-only hosted proxy for Pages Functions and Workers. |
-  | `src/frame-content.mjs` | shared URL rewriting, bridge tag injection, nonce stamping (no Node imports). |
-  | `src/headers.mjs` | shared header policy: LIVE forward allowlist, response strip list, security headers, cache rule (no Node imports). |
-  | `src/config.mjs` | project config discovery (`sitedrift.config.json`, `.sitedriftrc.json`, package.json `"sitedrift"`). |
-  | `src/index.mjs` | the `sitedrift` Node export (build helpers). |
-  | `types/*.d.mts` | published declarations, checked against the JS by `test/types.test-d.mts`. |
-  | `src/http.mjs` | `send` / `readBody` helpers. |
-  | `src/browser.mjs` | cross-platform `--open`. |
-  | `assets/viewer.{html,css,js}` | the viewer, edited as real HTML/CSS/JS. |
-  | `assets/bridge.js` | the frame bridge, loaded into framed pages as an external script. |
+  | `src/sitedrift.ts` | `sitedrift` bin entry: resolve config, start server, log, `--open`. |
+  | `src/sitedrift-mcp.ts` | `sitedrift-mcp` bin entry. |
+  | `src/cli.ts` | option parsing (`node:util` `parseArgs`, strict), env resolution, `--help`/`--version`. |
+  | `src/server.ts` | the request handler + http/https server. |
+  | `src/proxy.ts` | reverse proxy + `rewriteRootPaths` (§3). |
+  | `src/notes.ts` | the notes store: load/save/markdown/ops (§8). |
+  | `src/agent.ts` | JSON CLI client for the authenticated control API. |
+  | `src/mcp.ts` | zero-dependency stdio MCP tools, resources, and prompt. |
+  | `src/session.ts` | private session token + discovery file lifecycle. |
+  | `src/viewer.ts` | loads the viewer assets, injects the per-run config blob. |
+  | `src/wire.ts` | types shared by the server and the browser scripts (config blob, notes, bridge messages). Type-only. |
+  | `src/tls.ts` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
+  | `src/cloudflare.ts` | preview-only static-build wrapper + `init` scaffold (auto-detects the output dir). |
+  | `src/cloudflare-runtime.ts` | `createPreviewHandler`: read-only hosted proxy for Pages Functions and Workers. |
+  | `src/frame-content.ts` | shared URL rewriting, charset decoding, bridge tag injection, nonce stamping (no Node imports). |
+  | `src/headers.ts` | shared header policy: LIVE forward allowlist, response strip list, security headers, cache rule (no Node imports). |
+  | `src/config.ts` | project config discovery (`sitedrift.config.json`, `.sitedriftrc.json`, package.json `"sitedrift"`). |
+  | `src/index.ts` | the `sitedrift` Node export (build helpers). |
+  | `src/http.ts` | `send` / `readBody` helpers. |
+  | `src/browser.ts` | cross-platform `--open`. |
+  | `sitedrift.mjs` | one-line shim importing `dist/sitedrift.js`, kept for tooling that runs `node_modules/sitedrift/sitedrift.mjs`. |
+  | `assets/viewer.{html,css}` | the viewer markup and styles, edited as real HTML/CSS. The stylesheet defines its colours once as named tokens (`light-dark()` pairs under `color-scheme: light dark`), so the viewer follows the system theme without script. |
+  | `browser/viewer.ts` | the viewer script, served at `/viewer.js`. |
+  | `browser/bridge.ts` | the frame bridge, loaded into framed pages as an external script. |
   | `assets/icon.svg` | served at `/icon.svg`, favicon + toolbar mark. |
+
+  The two browser scripts compile on their own settings (DOM types, classic
+  scripts, no imports or exports at runtime) to `dist/assets/viewer.js` and
+  `dist/assets/bridge.js`, which the published package serves at the same URLs
+  as before. Run from source, `src/viewer.ts` strips the types from
+  `browser/*.ts` at startup instead, so no build is needed to develop.
 
   The viewer is static except a single `config` object written as inert JSON
   in `<script type="application/json" id="sitedrift-config">` and read with
@@ -119,8 +134,10 @@ the absolute upstream URL. `cleanBase()` normalizes the configured origins
 ### 3.2 `rewriteRootPaths(body, side)` — the rewrite rules
 
 Applied only to `text/html | text/css | javascript | application/json`
-responses. It prefixes root-relative references so the browser requests them
-back through the correct side's proxy prefix:
+responses. Bodies are decoded with the charset the response declares (UTF-8
+when it declares none or an unknown one), rewritten, and sent as UTF-8 with the
+content-type charset set to match. It prefixes root-relative references so the
+browser requests them back through the correct side's proxy prefix:
 
 - `href|src|action|poster="/…"` → `"/__<side>/…"`
 - `srcset="… /…, /…"` → each candidate prefixed
@@ -157,7 +174,7 @@ Only with no usable referer does the fallback serve the viewer page.
 - DEV gets the browser's headers minus `host`, `accept-encoding` (so upstream
   returns text the rewriter can edit), and `connection`; it is the user's own
   server, so cookies and form posts pass through.
-- LIVE gets only the allowlist in `src/headers.mjs` (`accept`,
+- LIVE gets only the allowlist in `src/headers.ts` (`accept`,
   `accept-language`, `user-agent`, `if-none-match`, `if-modified-since`,
   `range`) and only `GET`/`HEAD`; anything else is `405`. Localhost cookies
   never reach production.
@@ -287,7 +304,7 @@ URL/storage (§8), because they're a multi-writer channel.
 
 ## 7. Header stripping & the security boundary
 
-Both proxies remove `STRIP_RESPONSE_HEADERS` (`src/headers.mjs`) from every
+Both proxies remove `STRIP_RESPONSE_HEADERS` (`src/headers.ts`) from every
 upstream response:
 
 ```
@@ -427,36 +444,42 @@ the DEV/LIVE URLs, and compares it to the running server's `/health`:
 
 The original single file was split along the seams below (see the table in §1).
 The split was proven byte-faithful: the de-templated `assets/viewer.css` and
-`assets/viewer.js` were diffed against the previously-rendered viewer and are
+the viewer script were diffed against the previously-rendered viewer and are
 identical, so the extraction changed structure, not behavior.
 
 ```
 sitedrift/
-  sitedrift.mjs        // bin entry
   src/
-    cli.mjs            // arg parse, env resolution, help/version, cleanBase
-    server.mjs         // handler routing table, http/https bootstrap
-    proxy.mjs          // targetFor, proxy(), DEV/LIVE request headers
-    notes.mjs          // load/save/apply ops, markdown  ← pure, unit-testable
-    agent.mjs          // authenticated JSON CLI client
-    mcp.mjs            // stdio MCP tools/resources/prompt
-    session.mjs        // mode-0600 session descriptor lifecycle
-    viewer.mjs         // loads assets/, injects the per-run config blob
-    tls.mjs            // explicit/automatic local TLS
-    cloudflare.mjs     // preview build wrapper + init scaffold / output-dir detect
-    cloudflare-runtime.mjs // createPreviewHandler (Pages + Workers)
-    frame-content.mjs  // rewriteRootPaths, bridge tag, nonce stamping
-    headers.mjs        // shared header policy
-    config.mjs         // project config discovery
-    index.mjs          // the "sitedrift" Node export
-    http.mjs           // send / readBody
-    browser.mjs        // cross-platform --open
+    sitedrift.ts       // bin entry
+    sitedrift-mcp.ts   // MCP bin entry
+    cli.ts             // arg parse, env resolution, help/version, cleanBase
+    server.ts          // handler routing table, http/https bootstrap
+    proxy.ts           // targetFor, proxy(), DEV/LIVE request headers
+    notes.ts           // load/save/apply ops, markdown  ← pure, unit-testable
+    agent.ts           // authenticated JSON CLI client
+    mcp.ts             // stdio MCP tools/resources/prompt
+    session.ts         // mode-0600 session descriptor lifecycle
+    viewer.ts          // loads the viewer assets, injects the per-run config blob
+    wire.ts            // types shared with the browser scripts
+    tls.ts             // explicit/automatic local TLS
+    cloudflare.ts      // preview build wrapper + init scaffold / output-dir detect
+    cloudflare-runtime.ts // createPreviewHandler (Pages + Workers)
+    frame-content.ts   // rewriteRootPaths, bridge tag, nonce stamping
+    headers.ts         // shared header policy
+    config.ts          // project config discovery
+    index.ts           // the "sitedrift" Node export
+    http.ts            // send / readBody
+    browser.ts         // cross-platform --open
+  browser/
+    viewer.ts          // the client script (state, scroll, layout, notes, init)
+    bridge.ts          // frame bridge, external script in each framed page
   assets/
     viewer.html        // head + body markup (placeholders __VERSION__/__CONFIG__)
     viewer.css         // lifted out of the template literal
-    viewer.js          // the client bundle (state, scroll, layout, notes, init)
-    bridge.js          // frame bridge, external script in each framed page
     icon.svg
+  scripts/
+    build-package.ts   // tsc to dist/, declaration specifier rewrite, browser scripts
+  dist/                // build output (gitignored): what the package ships
 ```
 
 Notes on what shipped vs. the original plan:
@@ -466,11 +489,12 @@ Notes on what shipped vs. the original plan:
   asset-serving the referer rescue (§3.3) avoids for proxied pages, but these are
   explicit routes matched *before* the fallback, so §3.3 is unaffected. Verified:
   proxying a live route still returns 200 with rewritten paths.
-- **No build step** — the source ships as-is; `viewer.mjs` does placeholder
-  substitution at request time, not a bundle.
+- **No bundler.** `viewer.ts` does placeholder substitution at request time.
+  The published package is the sources compiled one-to-one (plus the browser
+  scripts), not a bundle.
 
-Remaining opportunity (not yet done): `assets/viewer.js` is still one
-~1,150-line
+Remaining opportunity (not yet done): `browser/viewer.ts` is still one
+~1,100-line
 file. The §5 scroll controller is the crown jewel and the best first candidate to
 split into its own client module with the §5 invariants as test names.
 

@@ -24,6 +24,8 @@ jobs:
       - run: npm run check
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e:visual
+        env:
+          SD_E2E_BUILT: '1'
       - run: npm pack --dry-run
       - name: Verify tag matches package version
         run: |

@@ -1,6 +1,0 @@
-{
-  // The CLI, local server, and MCP: checked for type errors without strict mode.
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "strict": false },
-  "include": ["sitedrift.mjs", "sitedrift-mcp.mjs", "src/**/*.mjs"]
-}

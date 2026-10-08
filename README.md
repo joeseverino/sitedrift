@@ -7,7 +7,7 @@ the only things that light up are the pixels that changed. Run it locally
 against your dev server, or let it wrap every Cloudflare preview deployment.
 
 <p align="center">
-  <img src="docs/images/sitedrift-split.jpg" alt="sitedrift comparing a redesigned local product page with production" width="100%">
+  <img src="docs/images/sitedrift-split.jpg" alt="sitedrift comparing a restaurant menu page in development with production, side by side" width="100%">
 </p>
 
 <p align="center"><strong>Same route. Same scroll. Every change visible.</strong></p>
@@ -27,7 +27,8 @@ npx sitedrift /pricing \
 
 That boots the viewer on `http://127.0.0.1:4178`, opens it at `/pricing`, and
 puts your dev build on the left and production on the right. Type any route in
-the toolbar and both panes follow.
+the toolbar and both panes follow. The viewer follows the system light or dark
+theme.
 
 Install it globally if you reach for it often:
 
@@ -54,6 +55,9 @@ For a project you use repeatedly, add `sitedrift.config.json`:
   "open": true
 }
 ```
+
+Boolean flags take an explicit value (`--open=false`, `--https=0`) or a
+`--no-` prefix (`--no-open`).
 
 Configuration precedence is **flag > environment > project file > default**.
 The file is discovered from the current directory upward (`sitedrift.config.json`,
@@ -136,19 +140,19 @@ installed dependency wrapped them, and the deployment opened as a review.
 
 ## See the whole review loop
 
-The included example compares a fictional Northstar release candidate against
-production. It uses realistic release drift: primary CTA, metric values, and a
-release badge change while the underlying layout stays aligned.
+The included example compares a restaurant menu page in development against
+production. The drift is ordinary release work: opening days, a dish, a price,
+and a button label change while the layout stays aligned.
 
 <table>
   <tr>
     <td width="50%">
-      <img src="docs/images/sitedrift-diff.jpg" alt="Difference overlay showing only changed pixels">
+      <img src="docs/images/sitedrift-diff.jpg" alt="Difference overlay of the menu page, lit only where the two builds differ">
       <br><strong>Pixel difference</strong><br>
       Overlay both pages and light up only what changed.
     </td>
     <td width="50%">
-      <img src="docs/images/sitedrift-collaboration.jpg" alt="Review drawer with notes from a human and an AI agent">
+      <img src="docs/images/sitedrift-collaboration.jpg" alt="Review notes drawer with one note from a person and one from an agent">
       <br><strong>Human + AI review channel</strong><br>
       Share route-specific findings through the viewer, CLI, or MCP.
     </td>
@@ -156,7 +160,7 @@ release badge change while the underlying layout stays aligned.
 </table>
 
 <p align="center">
-  <img src="docs/images/sitedrift-mobile.jpg" alt="sitedrift Solo mode on a narrow mobile viewport" width="360">
+  <img src="docs/images/sitedrift-mobile.jpg" alt="sitedrift in Solo mode at phone width, showing the development menu page" width="360">
   <br><strong>Focused mobile review</strong><br>
   Narrow screens default to Solo; Swap flips between DEV and LIVE, and Overlay
   surfaces a Diff control so you can isolate changes on a phone too.
@@ -356,10 +360,17 @@ Hosted preview problems are covered in the
 
 ```bash
 npm test
-npm run typecheck
+npm run check:types
 npm run test:e2e:visual
 npm run test:e2e:visual:update   # intentionally accept visual changes
+npm run build:package            # compile the publishable package into dist/
+npm run check                    # types, tests, build, and `npm pack --dry-run`
 ```
+
+The sources are strict TypeScript that Node runs directly (`npm start` is
+`node src/sitedrift.ts`). The published package ships the compiled JavaScript
+and declarations from `dist/`. `SD_E2E_BUILT=1` runs the visual suite against
+`dist/` instead of the sources.
 
 The visual suite uses deterministic origins and checked-in Chromium baselines
 for desktop split, narrow Solo, difference overlay, and the notes drawer.

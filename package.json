@@ -4,18 +4,14 @@
   "description": "Visual review for local and hosted previews: compare DEV and LIVE with Split, Diff, SEO, response deltas, notes, and MCP.",
   "type": "module",
   "bin": {
-    "sitedrift": "sitedrift.mjs",
-    "sitedrift-mcp": "sitedrift-mcp.mjs"
+    "sitedrift": "./dist/sitedrift.js",
+    "sitedrift-mcp": "./dist/sitedrift-mcp.js"
   },
   "files": [
+    "dist/",
     "sitedrift.mjs",
-    "sitedrift-mcp.mjs",
-    "src/",
-    "types/",
     "assets/viewer.html",
     "assets/viewer.css",
-    "assets/viewer.js",
-    "assets/bridge.js",
     "assets/icon.svg",
     "docs/CLOUDFLARE-PAGES.md",
     "AGENTS.md",
@@ -27,14 +23,16 @@
     "node": ">=24"
   },
   "scripts": {
-    "check": "npm test && npm run typecheck && npm run check:package",
+    "check": "npm run check:types && npm test && npm run build:package && npm run check:package",
     "check:package": "npm pack --dry-run",
-    "start": "node sitedrift.mjs",
-    "test": "for f in sitedrift.mjs src/*.mjs assets/viewer.js assets/bridge.js test/*.mjs; do node --check \"$f\" || exit 1; done && node --test test/*.test.mjs",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.cli.json",
+    "check:types": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json",
+    "build:package": "node scripts/build-package.ts",
+    "prepack": "npm run build:package",
+    "start": "node src/sitedrift.ts",
+    "test": "node --test test/*.test.ts",
     "test:e2e:visual": "VISUAL=1 playwright test",
     "test:e2e:visual:update": "VISUAL=1 playwright test --update-snapshots",
-    "docs:screenshots": "node test/capture-readme.mjs"
+    "docs:screenshots": "node test/capture-readme.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -67,16 +65,16 @@
   },
   "exports": {
     ".": {
-      "types": "./types/index.d.mts",
-      "default": "./src/index.mjs"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./cloudflare": {
-      "types": "./types/cloudflare.d.mts",
-      "default": "./src/cloudflare-runtime.mjs"
+      "types": "./dist/cloudflare-runtime.d.ts",
+      "default": "./dist/cloudflare-runtime.js"
     },
     "./package.json": "./package.json"
   },
-  "types": "./types/index.d.mts",
+  "types": "./dist/index.d.ts",
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "@types/node": "24.19.1",
