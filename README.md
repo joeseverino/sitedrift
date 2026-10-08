@@ -356,10 +356,17 @@ Hosted preview problems are covered in the
 
 ```bash
 npm test
-npm run typecheck
+npm run check:types
 npm run test:e2e:visual
 npm run test:e2e:visual:update   # intentionally accept visual changes
+npm run build:package            # compile the publishable package into dist/
+npm run check                    # types, tests, build, and `npm pack --dry-run`
 ```
+
+The sources are strict TypeScript that Node runs directly (`npm start` is
+`node src/sitedrift.ts`). The published package ships the compiled JavaScript
+and declarations from `dist/`. `SD_E2E_BUILT=1` runs the visual suite against
+`dist/` instead of the sources.
 
 The visual suite uses deterministic origins and checked-in Chromium baselines
 for desktop split, narrow Solo, difference overlay, and the notes drawer.

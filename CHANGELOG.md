@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+### TypeScript
+
+- The code is strict TypeScript. The package ships compiled ESM and `.d.ts`
+  files from `dist/`, and the public types (`PreviewHandlerOptions`,
+  `PreviewHandler`, `InstallOptions`, `InstallResult`, and the rest) are
+  generated from the sources instead of hand-written in `types/`. Imports,
+  CLI flags, MCP tools, and the served asset URLs are unchanged.
+- The `sitedrift` and `sitedrift-mcp` bins point at `dist/sitedrift.js` and
+  `dist/sitedrift-mcp.js`. A one-line `sitedrift.mjs` remains at the package
+  root for tooling that runs `node_modules/sitedrift/sitedrift.mjs`.
+- The viewer and bridge scripts are TypeScript under `browser/`, compiled for
+  the browser into the same `/viewer.js` and `/__sitedrift/assets/bridge.js`
+  assets. They stay classic external scripts, so strict-CSP pages are
+  unaffected. The viewer cache version is bumped to 36.
+- `npm run typecheck` is now `npm run check:types`; `npm run build:package`
+  builds `dist/`, and `prepack` runs it.
+
+### Fixes
+
+- A request such as `GET //` no longer crashes the server. An invalid request
+  target answers 400, and any other error in a handler answers 500.
+- Note bodies are read as bytes, so a multibyte character split across network
+  chunks is no longer corrupted, and the 1 MB limit counts bytes.
+- Running `sitedrift cloudflare` again on the same output no longer replaces
+  the preserved source pages with the wrapped viewer.
+- A missing browser opener (`xdg-open`) no longer crashes the server when
+  `--open` is used.
+- Boolean flags honor an explicit value: `--open=false` and `--https=0` turn the
+  setting off instead of on.
+- `/__devtools` and other paths that only start with `/__dev` or `/__live` are
+  no longer treated as proxy routes.
+- MCP: notifications never get a response, invalid requests answer `-32600`,
+  tool arguments are validated before a session is looked up, and an unknown
+  tool is reported as such.
+- Config values of the wrong type (`"brand": 42`) are rejected with the key
+  name. Entries in the notes file that are not notes are ignored.
+- The generated local TLS directory is `0700` and the key `0600`. Cached
+  certificates and keys are unchanged.
+- The control client explains a refused connection (a stale session file)
+  instead of printing a bare socket error.
+- Missing viewer assets raise an error at startup instead of serving blank
+  pages.
+
 ## 0.4.0
 
 ### Security

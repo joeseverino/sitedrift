@@ -1,27 +1,17 @@
 {
-  // Strict check of the published library surface and its declarations.
   "compilerOptions": {
-    "target": "es2023",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "lib": ["es2023", "dom", "dom.iterable"],
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
     "types": ["node"],
-    "allowJs": true,
-    "checkJs": true,
     "strict": true,
-    "noEmit": true,
-    "verbatimModuleSyntax": true
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "rewriteRelativeImportExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true
   },
-  "include": [
-    "src/cloudflare-runtime.mjs",
-    "src/cloudflare.mjs",
-    "src/config.mjs",
-    "src/frame-content.mjs",
-    "src/headers.mjs",
-    "src/index.mjs",
-    "src/proxy.mjs",
-    "src/viewer.mjs",
-    "types/**/*.d.mts",
-    "test/types.test-d.mts"
-  ]
+  "include": ["src/*.ts", "scripts/*.ts", "test/*.ts", "playwright.config.ts"]
 }
