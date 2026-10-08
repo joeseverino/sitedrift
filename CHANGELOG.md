@@ -47,6 +47,7 @@
 
 ### Fixes
 
+- Server errors answer with a fixed message (`internal error`, `invalid JSON`, `could not write the review file`) and the detail goes to stderr; note validation errors still return their own message.
 - The overlay opacity defaults to 50 when no value is stored or in the URL;
   `overlayAmount=0` still selects 0.
 - Upstream HTML, CSS, and JavaScript are decoded with the declared charset

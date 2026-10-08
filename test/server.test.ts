@@ -175,3 +175,21 @@ test('only whole /__dev and /__live path segments are proxied', async (t) => {
   assert.match(lookalike.headers['content-type'] ?? '', /text\/html/);
   assert.match(lookalike.body, /id="sitedrift-config"/);
 });
+
+test('a failed review save answers with a generic message, not the filesystem error', async (t) => {
+  const setup = fixture();
+  setup.config.vaultDir = path.join(os.tmpdir(), 'sitedrift-missing-dir', 'nested');
+  const port = await start(t, setup);
+  t.mock.method(console, 'error', () => undefined);
+  const res = await request(port, '/notes/save', { method: 'POST', token: 'secret', body: {} });
+  assert.equal(res.status, 500);
+  assert.equal(JSON.parse(res.body).error, 'could not write the review file');
+  assert.ok(!res.body.includes('sitedrift-missing-dir'));
+});
+
+test('a malformed notes body answers 400 with a fixed message', async (t) => {
+  const port = await start(t, fixture());
+  const res = await request(port, '/api/v1/notes', { method: 'POST', token: 'secret', body: '{not json' });
+  assert.equal(res.status, 400);
+  assert.equal(JSON.parse(res.body).error, 'invalid JSON');
+});

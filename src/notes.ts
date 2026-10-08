@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 
+import { HttpError } from './http.ts';
 import type { Note, Side } from './wire.ts';
 
 export type { Note };
@@ -85,7 +86,7 @@ export function createNotes({ notesFile, author }: { notesFile: string; author?:
     const noteId = typeof op['id'] === 'string' ? op['id'] : '';
     let notes = load();
     if (name === 'add') {
-      if (!op['text']) throw new Error('A note needs text.');
+      if (!op['text']) throw new HttpError('A note needs text.', 400);
       const text = String(op['text']).slice(0, 2000);
       const rawRoute = String(op['route'] || '/').slice(0, 2048);
       const route = rawRoute.startsWith('/') ? rawRoute : `/${rawRoute}`;
@@ -99,10 +100,10 @@ export function createNotes({ notesFile, author }: { notesFile: string; author?:
         if (notes.length > MAX_NOTES) notes = notes.slice(-MAX_NOTES);
       }
     } else if (name === 'remove') {
-      if (!notes.some((note) => note.id === noteId)) throw new Error(`Unknown note id: ${noteId}`);
+      if (!notes.some((note) => note.id === noteId)) throw new HttpError(`Unknown note id: ${noteId}`, 400);
       notes = notes.filter((note) => note.id !== noteId);
     } else if (name === 'toggle' || name === 'resolve' || name === 'reopen') {
-      if (!notes.some((note) => note.id === noteId)) throw new Error(`Unknown note id: ${noteId}`);
+      if (!notes.some((note) => note.id === noteId)) throw new HttpError(`Unknown note id: ${noteId}`, 400);
       notes = notes.map((note) => {
         if (note.id !== noteId) return note;
         return { ...note, done: name === 'toggle' ? !note.done : name === 'resolve' };
@@ -110,7 +111,7 @@ export function createNotes({ notesFile, author }: { notesFile: string; author?:
     } else if (name === 'clear') {
       notes = [];
     } else {
-      throw new Error(`Unknown notes operation: ${name || '(missing)'}`);
+      throw new HttpError(`Unknown notes operation: ${name || '(missing)'}`, 400);
     }
     save(notes);
     return notes;

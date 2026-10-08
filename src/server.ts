@@ -62,10 +62,6 @@ function proxySide(pathname: string): Side | null {
   return null;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 export function createServer(
   config: ServerSettings,
   tls: TlsMaterial | null,
@@ -168,7 +164,12 @@ export function createServer(
             const list = notes.applyOp(op);
             json(res, 200, { notes: list, revision: notesRevision(list) });
           } catch (error) {
-            json(res, error instanceof HttpError ? error.statusCode : 400, { error: errorMessage(error) });
+            if (error instanceof HttpError) json(res, error.statusCode, { error: error.message });
+            else if (error instanceof SyntaxError) json(res, 400, { error: 'invalid JSON' });
+            else {
+              console.error(error);
+              json(res, 500, { error: 'internal error' });
+            }
           }
         }
       } else {
@@ -192,7 +193,8 @@ export function createServer(
           fs.writeFileSync(file, notes.markdown(notes.load()));
           json(res, 200, { ok: true, path: file });
         } catch (error) {
-          json(res, 500, { ok: false, error: errorMessage(error) });
+          console.error(error);
+          json(res, 500, { ok: false, error: 'could not write the review file' });
         }
       }
     } else if (pathname === '/icon.svg') {
@@ -209,8 +211,9 @@ export function createServer(
   // Backstop: a request that throws must answer, not take the whole server down.
   const listener: RequestListener = (req, res) => {
     handle(req, res).catch((error: unknown) => {
+      console.error(error);
       if (res.headersSent) res.destroy();
-      else send(res, 500, `sitedrift: ${errorMessage(error)}`);
+      else send(res, 500, 'sitedrift: internal error');
     });
   };
 
