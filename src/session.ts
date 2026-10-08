@@ -66,7 +66,7 @@ export function removeSession(config: { port: number }): void {
   try {
     const file = sessionFile(config.port);
     const current: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (isRecord(current) && current.pid === process.pid) {
+    if (isRecord(current) && current['pid'] === process.pid) {
       fs.unlinkSync(file);
     }
   } catch {
@@ -81,11 +81,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isSession(value: unknown): value is Session {
   if (!isRecord(value)) return false;
   const { frameUrls } = value;
-  return typeof value.version === 'number'
-    && typeof value.pid === 'number'
+  return typeof value['version'] === 'number'
+    && typeof value['pid'] === 'number'
     && ['url', 'token', 'dev', 'live', 'notesFile', 'startedAt'].every((key) => typeof value[key] === 'string')
-    && isRecord(frameUrls) && typeof frameUrls.dev === 'string' && typeof frameUrls.live === 'string'
-    && (value.ca === undefined || typeof value.ca === 'string');
+    && isRecord(frameUrls) && typeof frameUrls['dev'] === 'string' && typeof frameUrls['live'] === 'string'
+    && (value['ca'] === undefined || typeof value['ca'] === 'string');
 }
 
 export function readSession(port: number): Session {

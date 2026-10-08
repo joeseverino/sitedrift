@@ -8,17 +8,12 @@ import { assets, renderHostedViewer } from './viewer.ts';
 // missing route, and a wrapped one would nest the viewer inside a frame.
 const ERROR_PAGE = '404.html';
 
+const SKIPPED_DIRS: ReadonlySet<string> = new Set(['__sitedrift', '__sitedrift_source']);
+
 function htmlFiles(root: string): string[] {
-  const found: string[] = [];
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    const file = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      if (!['__sitedrift', '__sitedrift_source'].includes(entry.name)) found.push(...htmlFiles(file));
-    } else if (entry.isFile() && entry.name.endsWith('.html') && entry.name !== ERROR_PAGE) {
-      found.push(file);
-    }
-  }
-  return found;
+  return fs.globSync('**/*.html', { cwd: root, exclude: (name) => SKIPPED_DIRS.has(path.basename(name)) })
+    .filter((file) => path.basename(file) !== ERROR_PAGE)
+    .map((file) => path.join(root, file));
 }
 
 // Common static-build output directories, in priority order.
@@ -52,8 +47,8 @@ function secureLive(value: string): string {
 
 /** Which hosted platform is building, and on which branch. */
 export function detectBuild(env: Record<string, string | undefined>): { platform: 'pages' | 'workers' | ''; branch: string } {
-  if (env.CF_PAGES === '1') return { platform: 'pages', branch: env.CF_PAGES_BRANCH || '' };
-  if (env.WORKERS_CI === '1') return { platform: 'workers', branch: env.WORKERS_CI_BRANCH || '' };
+  if (env['CF_PAGES'] === '1') return { platform: 'pages', branch: env['CF_PAGES_BRANCH'] || '' };
+  if (env['WORKERS_CI'] === '1') return { platform: 'workers', branch: env['WORKERS_CI_BRANCH'] || '' };
   return { platform: '', branch: '' };
 }
 
@@ -132,7 +127,7 @@ export function installCloudflarePreview({
   fs.writeFileSync(path.join(assetDir, 'bridge.js'), assets.bridge);
   fs.writeFileSync(path.join(assetDir, 'icon.svg'), assets.icon);
   const config: Record<string, string> = { live: liveUrl, productionBranch };
-  if (checkedNonce) config.nonce = checkedNonce;
+  if (checkedNonce) config['nonce'] = checkedNonce;
   fs.writeFileSync(path.join(internal, 'config.json'), JSON.stringify(config));
   return { installed: true, branch: branch || 'forced', files: files.length };
 }

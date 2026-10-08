@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { handleMcpRequest, runMcpServer, watchNotes } from '../src/mcp.ts';
 import type { McpResult } from '../src/mcp.ts';
@@ -123,7 +124,7 @@ test('the stdio server reports malformed JSON and invalid requests, then keeps s
   input.write('[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"ping"},5]\n');
   input.write('{"jsonrpc":"2.0","id":2,"method":"ping"}\n');
   for (let waited = 0; lines.length < 5 && waited < 2000; waited += 10) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await sleep(10);
   }
 
   const replies = lines.map((line): unknown => JSON.parse(line));

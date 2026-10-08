@@ -78,17 +78,15 @@ export interface FetchCall {
   headers: Headers;
 }
 
-/** Replaces global fetch for the rest of the test and records every call. */
+/** Replaces global fetch until the test ends and records every call. */
 export function mockFetch(t: TestContext, respond: (call: FetchCall) => Response | Promise<Response>): FetchCall[] {
-  const original = globalThis.fetch;
   const calls: FetchCall[] = [];
-  globalThis.fetch = async (input, init = {}) => {
+  t.mock.method(globalThis, 'fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = input instanceof URL ? input : new URL(input instanceof Request ? input.url : input);
     const call: FetchCall = { url, init, headers: new Headers(init.headers) };
     calls.push(call);
     return respond(call);
-  };
-  t.after(() => { globalThis.fetch = original; });
+  });
   return calls;
 }
 

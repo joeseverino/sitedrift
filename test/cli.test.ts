@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { parseCommand, resolveCloudflareCommand, resolveConfig } from '../src/cli.ts';
+import { parseArgs, parseCommand, resolveCloudflareCommand, resolveConfig } from '../src/cli.ts';
 import type { CloudflareCommand, Command } from '../src/cli.ts';
 import { assets } from '../src/viewer.ts';
 
@@ -150,6 +150,23 @@ test('a boolean flag given an explicit value honors it', () => {
   assert.equal(resolveConfig(['--https=1', ...live]).https, true);
   assert.equal(resolveConfig(['--https=0', ...live]).https, false);
   assert.throws(() => resolveConfig(['--open=maybe', ...live]), /--open must be true\/false or 1\/0/);
+});
+
+test('parses long, short, inline and negated options', () => {
+  const { opts, positionals } = parseArgs(['/pricing', '-d', 'http://a.test', '--live=https://b.test', '-p=4200', '-o', '--no-https', '--', '--literal']);
+  assert.deepEqual(opts, { dev: 'http://a.test', live: 'https://b.test', port: '4200', open: true, https: false });
+  assert.deepEqual(positionals, ['/pricing', '--literal']);
+  assert.equal(parseArgs(['-o=false']).opts.open, false);
+  assert.equal(parseArgs(['-h']).opts.help, true);
+});
+
+test('reports unknown options and missing values by flag name', () => {
+  assert.throws(() => parseArgs(['--wat']), /^Error: Unknown option: --wat$/);
+  assert.throws(() => parseArgs(['-x']), /^Error: Unknown option: --x$/);
+  assert.throws(() => parseArgs(['--wat=1']), /^Error: Unknown option: --wat$/);
+  assert.throws(() => parseArgs(['--dev']), /^Error: Option --dev requires a value\.$/);
+  assert.throws(() => parseArgs(['--dev', '--live', 'https://example.test']), /^Error: Option --dev requires a value\.$/);
+  assert.equal(parseArgs(['--notes=-weird']).opts.notes, '-weird');
 });
 
 test('rejects project configuration values of the wrong type', () => {

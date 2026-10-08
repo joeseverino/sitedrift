@@ -49,11 +49,8 @@ function authorized(req: IncomingMessage, session: ControlSession): boolean {
   if (header(req, 'authorization') !== `Bearer ${session.token}`) return false;
   const referer = header(req, 'referer');
   if (!referer) return true;
-  try {
-    return proxySide(new URL(referer).pathname) === null;
-  } catch {
-    return false;
-  }
+  const url = URL.parse(referer);
+  return url !== null && proxySide(url.pathname) === null;
 }
 
 /** Which side's proxy namespace a path belongs to: `/__dev` or `/__live`, as a whole path segment. */

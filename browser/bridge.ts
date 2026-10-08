@@ -9,8 +9,8 @@
   type SeoCheck = import('../src/wire.ts').SeoCheck;
 
   const script = document.currentScript;
-  const declaredSide = script?.dataset.side;
-  const prefix = script?.dataset.prefix || '';
+  const declaredSide = script?.dataset['side'];
+  const prefix = script?.dataset['prefix'] || '';
   if (declaredSide !== 'dev' && declaredSide !== 'live') return;
   const side: Side = declaredSide;
 

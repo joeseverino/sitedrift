@@ -15,12 +15,43 @@
 - The viewer and bridge scripts are TypeScript under `browser/`, compiled for
   the browser into the same `/viewer.js` and `/__sitedrift/assets/bridge.js`
   assets. They stay classic external scripts, so strict-CSP pages are
-  unaffected. The viewer cache version is bumped to 36.
+  unaffected. The viewer cache version is 37.
 - `npm run typecheck` is now `npm run check:types`; `npm run build:package`
   builds `dist/`, and `prepack` runs it.
+- The tsconfigs enable `exactOptionalPropertyTypes`, `noImplicitOverride`,
+  `noPropertyAccessFromIndexSignature`, `noFallthroughCasesInSwitch`,
+  `noUnusedLocals`, `noUnusedParameters`, and `noImplicitReturns`.
+
+### Node platform APIs
+
+- Option parsing uses `node:util` `parseArgs` in strict mode. Flags, short
+  aliases, error messages, and exit codes are unchanged. Boolean flags accept
+  `--no-<flag>` as well as `--flag=false`.
+- Hosted wrapping finds pages with `fs.globSync`. The MCP watcher and tests
+  use `node:timers/promises`, `URL.parse` and `URL.canParse` replace
+  try/catch URL checks, and the test fetch stub uses `t.mock.method`.
+
+### Viewer design
+
+- The stylesheet defines its colours once as named tokens and follows the
+  system theme with `color-scheme: light dark` and `light-dark()`. Text,
+  muted text, the accent, and the focus ring meet WCAG AA in both themes.
+- One deep-blue accent marks the active control, the LIVE label, the focus
+  ring, and the slider. DEV and LIVE are told apart by their labels.
+- Status chips are neutral with a small dot. Red and amber appear only for
+  errors, redirects, and metadata that differs.
+- Note authors are plain text. Radii, shadows, and spacing use one quiet
+  scale, and the interface uses the system UI and monospace font stacks.
+- The README screenshots and the visual test fixtures use a restaurant menu
+  page instead of a product-analytics landing page.
 
 ### Fixes
 
+- The overlay opacity defaults to 50 when no value is stored or in the URL;
+  `overlayAmount=0` still selects 0.
+- Upstream HTML, CSS, and JavaScript are decoded with the declared charset
+  (UTF-8 when absent or unknown) in the local proxy and the Cloudflare runtime,
+  and served as UTF-8.
 - A request such as `GET //` no longer crashes the server. An invalid request
   target answers 400, and any other error in a handler answers 500.
 - Note bodies are read as bytes, so a multibyte character split across network
@@ -100,7 +131,7 @@
 
 ### Packaging and tooling
 
-- Node 22 or newer. CI runs Node 22 and 24 and `tsc` type checks.
+- Node 24 or newer. CI runs Node 24 and `tsc` type checks.
 - Typed exports: `sitedrift` (Node build helpers) and `sitedrift/cloudflare`,
   each with a `types` condition, plus `./package.json`.
 - Project config can live in a `"sitedrift"` key in `package.json`, and the

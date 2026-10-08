@@ -31,7 +31,7 @@ export interface ViewerConfig {
 export interface SeoCheck {
   label: string;
   ok: boolean;
-  note?: string;
+  note?: string | undefined;
 }
 
 export interface NavigationTiming {

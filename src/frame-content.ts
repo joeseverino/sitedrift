@@ -17,6 +17,23 @@ export function checkNonce(nonce: string | undefined | null): string {
   return nonce;
 }
 
+const CHARSET = /;\s*charset\s*=\s*"?([^";\s]+)"?/i;
+
+/** Decodes bytes with the charset a content-type declares, falling back to UTF-8 when it is missing or unknown. */
+export function decodeBytes(bytes: ArrayBuffer, contentType: string | null): string {
+  const label = CHARSET.exec(contentType ?? '')?.[1];
+  try {
+    return new TextDecoder(label ?? 'utf-8').decode(bytes);
+  } catch {
+    return new TextDecoder().decode(bytes);
+  }
+}
+
+/** Declares UTF-8 on a content-type whose body was decoded and is sent re-encoded as UTF-8. */
+export function utf8ContentType(contentType: string): string {
+  return CHARSET.test(contentType) ? contentType.replace(CHARSET, '; charset=utf-8') : contentType;
+}
+
 const nonceAttr = (nonce: string): string => (nonce ? ` nonce="${nonce}"` : '');
 
 /** The external bridge script tag for a framed page. */

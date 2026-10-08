@@ -1,25 +1,40 @@
 import fs from 'node:fs';
 import os from 'node:os';
+import { parseArgs as parseNodeArgs } from 'node:util';
 
 import { readProjectConfig } from './config.ts';
 import type { Side } from './frame-content.ts';
 
-// Short flags and the boolean flags that never consume the next argument.
-const ALIASES: Readonly<Record<string, string>> = { d: 'dev', l: 'live', p: 'port', o: 'open', h: 'help', v: 'version' };
-const BOOLEAN_FLAGS = ['open', 'http', 'https', 'setup-https', 'help', 'version', 'js'] as const;
-const VALUE_FLAGS = [
-  'dev', 'live', 'port', 'host', 'hostname', 'cert', 'key', 'notes', 'brand', 'author',
-  'vault', 'config', 'route', 'side', 'dir', 'production-branch', 'nonce',
-] as const;
+const OPTIONS = {
+  dev: { type: 'string', short: 'd' },
+  live: { type: 'string', short: 'l' },
+  port: { type: 'string', short: 'p' },
+  host: { type: 'string' },
+  hostname: { type: 'string' },
+  cert: { type: 'string' },
+  key: { type: 'string' },
+  notes: { type: 'string' },
+  brand: { type: 'string' },
+  author: { type: 'string' },
+  vault: { type: 'string' },
+  config: { type: 'string' },
+  route: { type: 'string' },
+  side: { type: 'string' },
+  dir: { type: 'string' },
+  'production-branch': { type: 'string' },
+  nonce: { type: 'string' },
+  open: { type: 'boolean', short: 'o' },
+  http: { type: 'boolean' },
+  https: { type: 'boolean' },
+  'setup-https': { type: 'boolean' },
+  help: { type: 'boolean', short: 'h' },
+  version: { type: 'boolean', short: 'v' },
+  js: { type: 'boolean' },
+} as const;
 
-type BooleanFlag = (typeof BOOLEAN_FLAGS)[number];
-type ValueFlag = (typeof VALUE_FLAGS)[number];
-
-const booleanFlags: ReadonlySet<string> = new Set(BOOLEAN_FLAGS);
-const valueFlags: ReadonlySet<string> = new Set(VALUE_FLAGS);
-
-const isBooleanFlag = (name: string): name is BooleanFlag => booleanFlags.has(name);
-const isValueFlag = (name: string): name is ValueFlag => valueFlags.has(name);
+type OptionName = keyof typeof OPTIONS;
+type BooleanFlag = { [K in OptionName]: (typeof OPTIONS)[K]['type'] extends 'boolean' ? K : never }[OptionName];
+type ValueFlag = Exclude<OptionName, BooleanFlag>;
 
 export type Options = { [K in BooleanFlag]?: boolean } & { [K in ValueFlag]?: string };
 
@@ -36,32 +51,60 @@ function parseBoolean(value: string | boolean | undefined, name: string): boolea
   throw new Error(`${name} must be true/false or 1/0.`);
 }
 
-export function parseArgs(argv: readonly string[]): ParsedArgs {
-  const opts: Options = {};
-  const positionals: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i] ?? '';
-    if (token === '--') { positionals.push(...argv.slice(i + 1)); break; }
-    if (token[0] !== '-' || token === '-') { positionals.push(token); continue; }
-    let arg = token.replace(/^--?/, '');
-    let value: string | undefined;
-    const eq = arg.indexOf('=');
-    if (eq !== -1) { value = arg.slice(eq + 1); arg = arg.slice(0, eq); }
-    const name = ALIASES[arg] ?? arg;
-    if (isBooleanFlag(name)) {
-      opts[name] = value === undefined ? true : parseBoolean(value, `--${name}`);
-    } else if (isValueFlag(name)) {
-      if (value === undefined) {
-        const next = argv[i + 1];
-        if (next !== undefined && next[0] !== '-') { value = next; i++; }
-        else throw new Error(`Option --${name} requires a value.`);
-      }
-      opts[name] = value;
+const longNames: ReadonlyMap<string, OptionName> = new Map(
+  Object.entries(OPTIONS).flatMap(([name, spec]) => {
+    const long = name as OptionName;
+    return 'short' in spec ? [[name, long], [spec.short, long]] : [[name, long]];
+  }),
+);
+
+/** Rewrites `--flag=value` and `-f=value` so a boolean takes `true/false/1/0` and Node's parser sees `--flag` or `--no-flag`. */
+function normalize(argv: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const [index, token] of argv.entries()) {
+    if (token === '--') {
+      out.push(...argv.slice(index));
+      break;
+    }
+    const match = /^--?([^=]+)=([\s\S]*)$/.exec(token);
+    const name = match?.[1] === undefined ? undefined : longNames.get(match[1]);
+    if (!match || name === undefined) {
+      out.push(token);
+    } else if (OPTIONS[name].type === 'boolean') {
+      out.push(parseBoolean(match[2], `--${name}`) ? `--${name}` : `--no-${name}`);
     } else {
-      throw new Error(`Unknown option: --${arg}`);
+      out.push(`--${name}=${match[2]}`);
     }
   }
-  return { opts, positionals };
+  return out;
+}
+
+function optionError(error: unknown): Error {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined;
+  if (error instanceof Error && code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
+    const [, flag = ''] = /'-{1,2}([^']+)'/.exec(error.message) ?? [];
+    return new Error(`Unknown option: --${flag}`);
+  }
+  if (error instanceof Error && code === 'ERR_PARSE_ARGS_INVALID_OPTION_VALUE') {
+    const [, flag = ''] = /--([\w-]+)/.exec(error.message) ?? [];
+    return new Error(`Option --${flag} requires a value.`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+export function parseArgs(argv: readonly string[]): ParsedArgs {
+  try {
+    const { values, positionals } = parseNodeArgs({
+      args: normalize(argv),
+      options: OPTIONS,
+      allowPositionals: true,
+      allowNegative: true,
+      strict: true,
+    });
+    return { opts: { ...values }, positionals };
+  } catch (error) {
+    throw optionError(error);
+  }
 }
 
 // SITEDRIFT_<NAME> is the public env var; SITE_COMPARE_<NAME> is the legacy name
@@ -154,9 +197,9 @@ Cloudflare options (sitedrift cloudflare):
       --brand <text>             Strip "| <text>" from titles
       --js                       init: write [[path]].js instead of .ts
 
-Every option also reads SITEDRIFT_<NAME> (e.g. SITEDRIFT_DEV). Binds to
-127.0.0.1 by default. It strips framing and isolation headers, so never expose it
-publicly. See https://github.com/joeseverino/sitedrift`);
+Every option also reads SITEDRIFT_<NAME> (e.g. SITEDRIFT_DEV). Boolean options
+accept --no-<name> or =false. Binds to 127.0.0.1 by default. It strips framing
+and isolation headers, so never expose it publicly. See https://github.com/joeseverino/sitedrift`);
 }
 
 export interface ResolvedConfig {

@@ -6,7 +6,7 @@ import type { Side, ViewerConfig } from './wire.ts';
 
 // Bumped when the viewer assets change; busts the ?v= cache and reported in
 // /health so the `site compare` wrapper knows when to restart the server.
-export const VIEWER_VERSION = 36;
+export const VIEWER_VERSION = 37;
 
 function readAsset(path: string): string {
   try {

@@ -41,6 +41,14 @@ test('LIVE receives only the header allowlist and never sets cookies', async (t)
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
 });
 
+test('LIVE text is decoded with the declared charset and sent as UTF-8', async (t) => {
+  const page = Buffer.from('<html><head></head><body>caf\xe9</body></html>', 'latin1');
+  mockFetch(t, () => new Response(page, { headers: { 'content-type': 'text/html; charset=windows-1252' } }));
+  const response = await onRequest({ request: request('/__sitedrift/live/'), env: { ASSETS: previewAssets() } });
+  assert.match(await response.text(), /caf\u00e9/);
+  assert.match(response.headers.get('content-type') ?? '', /charset=utf-8/i);
+});
+
 test('forwardHeaders and securityHeaders are configurable', async (t) => {
   const seen = mockFetch(t, () => new Response('ok', { headers: { 'content-type': 'text/plain' } }));
   const handler = createPreviewHandler({

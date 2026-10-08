@@ -4,143 +4,77 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 
-const root = new URL('../', import.meta.url);
+const root = path.join(import.meta.dirname, '..');
 const notesFile = path.join(os.tmpdir(), `sitedrift-visual-${process.pid}.json`);
 
 interface PageOptions {
-  label: string;
-  accent: string;
-  accentSoft: string;
-  eyebrow: string;
   title: string;
-  copy: string;
-  primary: string;
-  secondary: string;
-  metric: string;
-  delta: string;
-  compactNav: boolean;
-  release: string;
-  releaseClass?: string;
+  heading: string;
+  description: string;
+  reserve: string;
+  hours: string;
+  dishes: ReadonlyArray<readonly [name: string, detail: string, price: string]>;
 }
 
-function page({
-  label,
-  accent,
-  accentSoft,
-  eyebrow,
-  title,
-  copy,
-  primary,
-  secondary,
-  metric,
-  delta,
-  compactNav,
-  release,
-  releaseClass,
-}: PageOptions): string {
+function page({ title, heading, description, reserve, hours, dishes }: PageOptions): string {
+  const rows = dishes
+    .map(([name, detail, price]) => `<li><div><h3>${name}</h3><p>${detail}</p></div><span>${price}</span></li>`)
+    .join('');
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="${copy}">
+  <meta name="description" content="${description}">
   <meta property="og:title" content="${title}">
   <meta property="og:image" content="/fixture.png">
-  <link rel="canonical" href="https://example.test/product">
-  <title>${label} product analytics | Northstar</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="canonical" href="https://example.test/menu">
+  <title>${title}</title>
   <style>
-    *{box-sizing:border-box}html{background:#f7f8fc}body{margin:0;color:#141826;background:
-      radial-gradient(circle at 80% 8%,${accentSoft},transparent 32%),#f7f8fc;
-      font:15px/1.55 Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-    a{color:inherit;text-decoration:none}.shell{max-width:1180px;margin:auto;padding:0 28px}
-    nav{height:68px;display:flex;align-items:center;gap:28px;border-bottom:1px solid #e4e7ef}
-    .logo{display:flex;align-items:center;gap:9px;font-weight:850;letter-spacing:-.03em}.logo-mark{width:25px;height:25px;display:grid;
-      place-items:center;color:white;background:${accent};border-radius:8px;box-shadow:0 8px 22px ${accentSoft};font-size:12px}
-    .navlinks{display:flex;gap:22px;color:#697083;font-size:13px;font-weight:650}.navlinks a:first-child{color:#171b29}
-    .nav-actions{margin-left:auto;display:flex;align-items:center;gap:9px}.nav-actions a{padding:8px 12px;border-radius:9px;font-size:12px;font-weight:750}
-    .nav-actions .start{color:white;background:${accent};box-shadow:0 7px 18px ${accentSoft}}
-    main{padding:64px 0 90px}.hero{display:grid;grid-template-columns:minmax(0,1.04fr) minmax(330px,.96fr);gap:42px;align-items:center}
-    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;color:${accent};background:white;border:1px solid #e4e7ef;
-      border-radius:999px;box-shadow:0 5px 18px rgb(28 34 48 / 6%);font-size:10px;font-weight:850;letter-spacing:.1em;text-transform:uppercase}
-    .eyebrow:before{content:"";width:6px;height:6px;border-radius:50%;background:${accent};box-shadow:0 0 0 4px ${accentSoft}}
-    h1{max-width:620px;margin:20px 0 18px;font-size:clamp(42px,5.4vw,70px);line-height:.98;letter-spacing:-.062em}
-    .lede{max-width:560px;margin:0;color:#626a7d;font-size:17px}.actions{display:flex;gap:10px;margin-top:28px}
-    button{min-height:43px;padding:0 17px;border:1px solid #dfe3eb;border-radius:11px;background:white;color:#252a39;font:750 13px inherit;cursor:pointer}
-    button.primary{color:white;background:${accent};border-color:${accent};box-shadow:0 10px 24px ${accentSoft}}
-    .trust{display:flex;align-items:center;gap:10px;margin-top:25px;color:#747b8c;font-size:11px}.avatars{display:flex}
-    .avatars span{width:23px;height:23px;display:grid;place-items:center;margin-left:-5px;border:2px solid #f7f8fc;border-radius:50%;
-      color:white;background:#242938;font-size:8px;font-weight:800}.avatars span:first-child{margin-left:0}.avatars span:nth-child(2){background:${accent}}
-    .product{position:relative;padding:12px;border:1px solid #dfe3eb;border-radius:22px;background:rgb(255 255 255 / 72%);
-      box-shadow:0 26px 70px rgb(35 42 62 / 15%);backdrop-filter:blur(12px)}
-    .window{overflow:hidden;border:1px solid #e3e6ed;border-radius:14px;background:white}.windowbar{height:38px;display:flex;align-items:center;gap:5px;padding:0 12px;
-      border-bottom:1px solid #eceef3}.dot{width:6px;height:6px;border-radius:50%;background:#d6dae3}.windowbar b{margin-left:7px;font-size:9px;color:#858c9d}
-    .dash{display:grid;grid-template-columns:88px 1fr;min-height:330px}.rail{padding:15px 10px;background:#111520;color:#727a8e}
-    .rail strong{display:block;margin:0 4px 16px;color:#f2f4f8;font-size:9px}.rail i{display:block;height:8px;margin:12px 4px;border-radius:3px;background:#2a303e}
-    .rail i.active{width:70%;background:${accent}}.content{padding:18px}.content-head{display:flex;justify-content:space-between;align-items:center}
-    .content-head span{font-size:10px;color:#7a8294}.content-head b{font-size:12px}.period{padding:5px 7px;border:1px solid #e5e8ef;border-radius:6px;font-size:8px}
-    .metric{margin-top:18px;padding:16px;border:1px solid #e7e9ef;border-radius:12px;background:#fcfcfe}.metric small{color:#798195;font-size:9px}
-    .metric-value{display:flex;align-items:end;gap:8px;margin-top:4px}.metric-value strong{font-size:30px;line-height:1;letter-spacing:-.04em}
-    .metric-value em{color:#139a63;background:#e5f8ef;border-radius:5px;padding:2px 5px;font-size:8px;font-style:normal;font-weight:800}
-    .chart{height:105px;margin-top:18px;display:flex;align-items:end;gap:6px;border-bottom:1px solid #e7eaf0}
-    .chart span{flex:1;min-width:4px;height:var(--h);border-radius:4px 4px 0 0;background:linear-gradient(${accent},${accentSoft})}
-    .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.mini{padding:9px;border:1px solid #e8eaf0;border-radius:8px}
-    .mini small{display:block;color:#8a91a1;font-size:7px}.mini b{font-size:11px}.release{position:absolute;right:-13px;bottom:25px;padding:9px 11px;
-      color:white;background:#141925;border:1px solid #32394a;border-radius:10px;box-shadow:0 14px 35px rgb(17 21 31 / 28%);font-size:9px}
-    .release b{display:block;color:${accent};font-size:8px;letter-spacing:.08em;text-transform:uppercase}
-    .release.subtle{right:18px;bottom:18px;color:#5f6677;background:white;border-color:#e3e6ed;box-shadow:0 8px 22px rgb(35 42 62 / 10%)}
-    .proof{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:78px}.proof article{padding:17px;border-top:1px solid #dfe3eb}
-    .proof b{display:block;margin-bottom:4px;font-size:12px}.proof p{margin:0;color:#7a8293;font-size:10px}
-    @media(max-width:760px){.shell{padding:0 20px}nav{height:58px}.navlinks{display:none}.nav-actions a:not(.start){display:none}
-      main{padding:38px 0 60px}.hero{grid-template-columns:1fr;gap:36px}h1{font-size:48px}.lede{font-size:16px}.product{padding:9px}
-      .dash{grid-template-columns:65px 1fr;min-height:300px}.rail{padding:14px 7px}.content{padding:14px}.release{right:-6px}
-      .proof{grid-template-columns:1fr;margin-top:45px}.proof article{padding:13px 0}.navlinks.compact{display:${compactNav ? 'none' : 'flex'}}}
-    @media(max-width:520px){.nav-actions{display:none}}
+    *{box-sizing:border-box}
+    body{margin:0;color:#262320;background:#faf8f4;font:16px/1.6 Georgia,"Times New Roman",serif}
+    a{color:inherit}.wrap{max-width:760px;margin:auto;padding:0 28px}
+    header{border-bottom:1px solid #ddd6ca}
+    nav{display:flex;align-items:baseline;gap:28px;padding:22px 0;font:14px system-ui,sans-serif}
+    .name{margin-right:auto;font:700 20px Georgia,serif;text-decoration:none}
+    nav a:not(.name){color:#6b645a;text-decoration:none}nav a.current{color:#262320;border-bottom:1px solid #262320}
+    main.wrap{padding-block:56px 72px}
+    h1{margin:0 0 12px;font-size:44px;line-height:1.1;font-weight:400}
+    .intro{max-width:34em;margin:0 0 28px;color:#6b645a;font-size:18px}
+    .visit{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin:0 0 48px;font:14px system-ui,sans-serif;color:#6b645a}
+    .visit a{padding:9px 16px;color:#faf8f4;background:#262320;text-decoration:none;border-radius:2px}
+    h2{margin:40px 0 4px;padding-bottom:8px;border-bottom:1px solid #ddd6ca;font:600 12px system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#6b645a}
+    ul{margin:0;padding:0;list-style:none}
+    li{display:flex;justify-content:space-between;gap:24px;padding:16px 0;border-bottom:1px solid #ece6db}
+    li h3{margin:0;font-size:18px;font-weight:600}li p{margin:2px 0 0;color:#6b645a;font-size:15px}li span{font-variant-numeric:tabular-nums}
+    footer{padding:28px 0 40px;border-top:1px solid #ddd6ca;color:#6b645a;font:13px system-ui,sans-serif}
+    @media(max-width:600px){.wrap{padding:0 20px}nav{gap:16px;padding:16px 0}main.wrap{padding-block:32px 48px}h1{font-size:34px}.intro{font-size:16px}}
   </style>
 </head>
 <body>
-  <div class="shell">
-    <nav>
-      <a class="logo" href="/"><span class="logo-mark">N</span>northstar</a>
-      <div class="navlinks compact"><a href="/product">Product</a><a href="/customers">Customers</a><a href="/pricing">Pricing</a></div>
-      <div class="nav-actions"><a href="/login">Sign in</a><a class="start" href="/signup">${primary}</a></div>
-    </nav>
-    <main>
-      <section class="hero">
-        <div>
-          <span class="eyebrow">${eyebrow}</span>
-          <h1>${title}</h1>
-          <p class="lede">${copy}</p>
-          <div class="actions"><button class="primary">${primary}</button><button>${secondary}</button></div>
-          <div class="trust"><span class="avatars"><span>AK</span><span>LM</span><span>JR</span></span>Trusted by 2,400 product teams</div>
-        </div>
-        <div class="product">
-          <div class="window">
-            <div class="windowbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><b>northstar / overview</b></div>
-            <div class="dash">
-              <aside class="rail"><strong>NORTHSTAR</strong><i class="active"></i><i></i><i></i><i></i><i></i></aside>
-              <section class="content">
-                <div class="content-head"><div><span>Workspace</span><br><b>Growth overview</b></div><span class="period">Last 30 days</span></div>
-                <div class="metric"><small>ACTIVE USERS</small><div class="metric-value"><strong>${metric}</strong><em>${delta}</em></div>
-                  <div class="chart">${[35,48,42,61,55,72,66,85,74,92,82,100].map((h) => `<span style="--h:${h}%"></span>`).join('')}</div>
-                </div>
-                <div class="cards"><div class="mini"><small>Activation</small><b>68.4%</b></div><div class="mini"><small>Retention</small><b>84.1%</b></div><div class="mini"><small>NPS</small><b>62</b></div></div>
-              </section>
-            </div>
-          </div>
-          <div class="release ${releaseClass || ''}"><b>${label}</b>${release}</div>
-        </div>
-      </section>
-      <section class="proof"><article><b>One source of truth</b><p>Every signal connected to the same customer journey.</p></article>
-        <article><b>Answers in seconds</b><p>Fast funnels, cohorts, and release comparisons.</p></article>
-        <article><b>Built for teams</b><p>Share context without exporting another dashboard.</p></article></section>
-    </main>
-  </div>
+  <header><div class="wrap"><nav><a class="name" href="/">Fennel &amp; Salt</a><a class="current" href="/menu">Menu</a><a href="/visit">Visit</a><a href="/contact">Contact</a></nav></div></header>
+  <main class="wrap">
+    <h1>${heading}</h1>
+    <p class="intro">${description}</p>
+    <p class="visit"><span>${hours}</span><a href="/reserve">${reserve}</a></p>
+    <h2>Dinner</h2>
+    <ul>${rows}</ul>
+    <h2>Dessert</h2>
+    <ul><li><div><h3>Honey cake</h3><p>Whipped ricotta, thyme</p></div><span>11</span></li><li><div><h3>Dark chocolate pot</h3><p>Olive oil, sea salt</p></div><span>10</span></li></ul>
+  </main>
+  <footer><div class="wrap">14 Mill Street, Portland &middot; Closed Mondays</div></footer>
 </body>
 </html>`;
 }
 
 function fixture(port: number, body: string): http.Server {
   const server = http.createServer((req, res) => {
+    if (req.url === '/favicon.svg') {
+      res.writeHead(200, { 'content-type': 'image/svg+xml' });
+      res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#262320"/><path d="M11 8h11v3h-7.5v4H21v3h-6.5v6H11z" fill="#faf8f4"/></svg>');
+      return;
+    }
     if (req.url === '/favicon.ico' || req.url === '/fixture.png') {
       res.writeHead(204);
       res.end();
@@ -156,18 +90,18 @@ function fixture(port: number, body: string): http.Server {
 fs.writeFileSync(notesFile, JSON.stringify([
   {
     id: 'showcase-agent',
-    text: 'Primary CTA changed from demo to trial. Verify the experiment copy with product.',
-    author: 'claude',
-    route: '/product',
+    text: 'Hours say Tuesday to Sunday on DEV, Wednesday to Sunday on LIVE. Confirm the new opening day before launch.',
+    author: 'agent',
+    route: '/menu',
     side: 'dev',
     done: false,
     ts: 1760000000000,
   },
   {
     id: 'showcase-human',
-    text: 'Dashboard metric is correct in DEV. Mobile layout verified at 412px.',
-    author: 'joe',
-    route: '/product',
+    text: 'Lamb shoulder is 28 on DEV and 26 on LIVE. The new price is correct. Mobile layout checked at 412px.',
+    author: 'sam',
+    route: '/menu',
     side: 'dev',
     done: true,
     ts: 1760000001000,
@@ -176,43 +110,39 @@ fs.writeFileSync(notesFile, JSON.stringify([
 
 // Ports default to the committed range but are env-overridable so the suite can
 // run alongside a live sitedrift preview without colliding on these ports.
-const PORT = Number(process.env.SD_E2E_PORT || 45110);
-const DEV_PORT = Number(process.env.SD_E2E_DEV_PORT || 45101);
-const LIVE_PORT = Number(process.env.SD_E2E_LIVE_PORT || 45102);
+const PORT = Number(process.env['SD_E2E_PORT'] || 45110);
+const DEV_PORT = Number(process.env['SD_E2E_DEV_PORT'] || 45101);
+const LIVE_PORT = Number(process.env['SD_E2E_LIVE_PORT'] || 45102);
 
 const dev = fixture(DEV_PORT, page({
-  label: 'Development',
-  accent: '#6d5dfc',
-  accentSoft: 'rgb(109 93 252 / 20%)',
-  eyebrow: 'Product analytics',
-  title: 'Turn product data into decisions.',
-  copy: 'Bring every signal together and understand how customers move through your product.',
-  primary: 'Start free',
-  secondary: 'Explore product',
-  metric: '48,291',
-  delta: '+12.8%',
-  compactNav: false,
-  release: 'Candidate · v2.4',
-  releaseClass: 'subtle',
+  title: 'Spring dinner menu | Fennel & Salt, Portland',
+  heading: 'Dinner menu',
+  description: 'Seasonal plates cooked over wood, with a short list of natural wines and cider.',
+  reserve: 'Reserve a table',
+  hours: 'Tuesday to Sunday, 5 to 10 pm',
+  dishes: [
+    ['Asparagus', 'Brown butter, soft egg yolk, chives', '16'],
+    ['Wood-fired flatbread', 'Whipped feta, spring onion, lemon', '13'],
+    ['Braised lamb shoulder', 'White beans, salsa verde', '28'],
+    ['Roast cod', 'Peas, mint, charred lettuce', '27'],
+  ],
 }));
 const live = fixture(LIVE_PORT, page({
-  label: 'Production',
-  accent: '#6357e8',
-  accentSoft: 'rgb(99 87 232 / 18%)',
-  eyebrow: 'Product analytics',
-  title: 'Turn product data into decisions.',
-  copy: 'Bring every signal together and understand how customers move through your product.',
-  primary: 'Book a demo',
-  secondary: 'Explore product',
-  metric: '47,806',
-  delta: '+11.2%',
-  compactNav: false,
-  release: 'Current · v2.3',
-  releaseClass: 'subtle',
+  title: 'Dinner menu | Fennel & Salt, Portland',
+  heading: 'Dinner menu',
+  description: 'Seasonal plates cooked over wood, with a short list of natural wines and cider.',
+  reserve: 'Book a table',
+  hours: 'Wednesday to Sunday, 5 to 10 pm',
+  dishes: [
+    ['Roasted squash soup', 'Sage, toasted pumpkin seeds', '12'],
+    ['Wood-fired flatbread', 'Whipped feta, spring onion, lemon', '13'],
+    ['Braised lamb shoulder', 'White beans, salsa verde', '26'],
+    ['Roast cod', 'Peas, mint, charred lettuce', '27'],
+  ],
 }));
 const child = spawn(process.execPath, [
-  new URL(process.env.SD_E2E_BUILT === '1' ? '../dist/sitedrift.js' : '../src/sitedrift.ts', import.meta.url).pathname,
-  '/product',
+  path.join(root, process.env['SD_E2E_BUILT'] === '1' ? 'dist/sitedrift.js' : 'src/sitedrift.ts'),
+  '/menu',
   '--port', String(PORT),
   '--dev', `http://127.0.0.1:${DEV_PORT}`,
   '--live', `http://127.0.0.1:${LIVE_PORT}`,

@@ -85,10 +85,10 @@ test('local proxy maps same-origin redirects and stops at the origin boundary', 
   });
   const same = captureResponse();
   await proxy(fakeRequest(), same.res, 'live', new URL('http://localhost/__live/old'));
-  assert.equal(same.out.headers.location, '/__live/next');
+  assert.equal(same.out.headers['location'], '/__live/next');
   location = 'https://elsewhere.example/';
   const off = captureResponse();
   await proxy(fakeRequest(), off.res, 'live', new URL('http://localhost/__live/old'));
-  assert.equal(off.out.headers.location, undefined);
+  assert.equal(off.out.headers['location'], undefined);
   assert.match(off.out.body, /outside https:\/\/live\.example\.test/);
 });

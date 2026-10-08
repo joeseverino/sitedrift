@@ -1,9 +1,10 @@
+import { setTimeout as sleep } from 'node:timers/promises';
+
 import { readVersion } from './cli.ts';
 import { requestSession } from './agent.ts';
 import type { NoteOperation } from './notes.ts';
 import { readSession } from './session.ts';
 import type { Session } from './session.ts';
-import type { Side } from './wire.ts';
 
 const PROTOCOL_VERSIONS: ReadonlySet<string> = new Set([
   '2024-11-05',
@@ -209,7 +210,7 @@ function setupInstructions(args: Record<string, unknown>) {
 
 function noteOperation(name: string, args: Record<string, unknown>): NoteOperation {
   if (name === 'sitedrift_note_add') {
-    const side = args.side ?? null;
+    const side = args['side'] ?? null;
     if (side !== null && side !== 'dev' && side !== 'live') throw new Error('side must be "dev", "live", or null.');
     return {
       op: 'add',
@@ -223,10 +224,6 @@ function noteOperation(name: string, args: Record<string, unknown>): NoteOperati
   const action = NOTE_ACTIONS.find((candidate) => name === `sitedrift_note_${candidate}`);
   if (!action) throw new Error(`Unknown tool: ${name}`);
   return { op: action, id: requiredString(args, 'id') };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 interface NotesPayload {
@@ -348,7 +345,7 @@ async function respond(message: McpRequest): Promise<McpResponse | null> {
   if (method === 'notifications/initialized' || method === 'notifications/cancelled') return null;
   if (method === 'ping') return result({});
   if (method === 'initialize') {
-    const requested = params.protocolVersion;
+    const requested = params['protocolVersion'];
     if (typeof requested === 'string' && requested && !PROTOCOL_VERSIONS.has(requested)) {
       return failure(-32602, 'Unsupported protocol version', { supported: [...PROTOCOL_VERSIONS], requested });
     }
@@ -362,8 +359,8 @@ async function respond(message: McpRequest): Promise<McpResponse | null> {
   if (method === 'tools/list') return result({ tools: TOOLS });
   if (method === 'tools/call') {
     try {
-      const name = typeof params.name === 'string' ? params.name : '';
-      const args = isRecord(params.arguments) ? params.arguments : {};
+      const name = typeof params['name'] === 'string' ? params['name'] : '';
+      const args = isRecord(params['arguments']) ? params['arguments'] : {};
       return result(jsonResult(await callTool(name, args)));
     } catch (error) {
       return result({ content: [{ type: 'text', text: errorMessage(error) }], isError: true });
@@ -379,7 +376,7 @@ async function respond(message: McpRequest): Promise<McpResponse | null> {
     });
   }
   if (method === 'resources/read') {
-    const uri = typeof params.uri === 'string' ? params.uri : '';
+    const uri = typeof params['uri'] === 'string' ? params['uri'] : '';
     try {
       if (uri === 'sitedrift://guide') {
         return result({ contents: [{ uri, mimeType: 'text/markdown', text: guideText() }] });
@@ -407,18 +404,18 @@ async function respond(message: McpRequest): Promise<McpResponse | null> {
     });
   }
   if (method === 'prompts/get') {
-    if (params.name !== 'review_route') return failure(-32602, `Unknown prompt: ${String(params.name)}`);
-    return result(promptResult(isRecord(params.arguments) ? params.arguments : {}));
+    if (params['name'] !== 'review_route') return failure(-32602, `Unknown prompt: ${String(params['name'])}`);
+    return result(promptResult(isRecord(params['arguments']) ? params['arguments'] : {}));
   }
   return failure(-32601, `Method not found: ${method}`);
 }
 
 function parseRequest(value: unknown): McpRequest | null {
-  if (!isRecord(value) || typeof value.method !== 'string') return null;
+  if (!isRecord(value) || typeof value['method'] !== 'string') return null;
   const { id, params } = value;
   if (id !== undefined && id !== null && typeof id !== 'string' && typeof id !== 'number') return null;
   return {
-    method: value.method,
+    method: value['method'],
     ...(id === undefined ? {} : { id }),
     ...(isRecord(params) ? { params } : {}),
   };

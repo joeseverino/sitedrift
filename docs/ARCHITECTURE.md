@@ -30,7 +30,7 @@ several parts look redundant but are load-bearing.
   |---|---|
   | `src/sitedrift.ts` | `sitedrift` bin entry: resolve config, start server, log, `--open`. |
   | `src/sitedrift-mcp.ts` | `sitedrift-mcp` bin entry. |
-  | `src/cli.ts` | arg parsing, env resolution, `--help`/`--version`. |
+  | `src/cli.ts` | option parsing (`node:util` `parseArgs`, strict), env resolution, `--help`/`--version`. |
   | `src/server.ts` | the request handler + http/https server. |
   | `src/proxy.ts` | reverse proxy + `rewriteRootPaths` (§3). |
   | `src/notes.ts` | the notes store: load/save/markdown/ops (§8). |
@@ -42,14 +42,14 @@ several parts look redundant but are load-bearing.
   | `src/tls.ts` | `--https` / `--setup-https`: cert resolution via mkcert→openssl. |
   | `src/cloudflare.ts` | preview-only static-build wrapper + `init` scaffold (auto-detects the output dir). |
   | `src/cloudflare-runtime.ts` | `createPreviewHandler`: read-only hosted proxy for Pages Functions and Workers. |
-  | `src/frame-content.ts` | shared URL rewriting, bridge tag injection, nonce stamping (no Node imports). |
+  | `src/frame-content.ts` | shared URL rewriting, charset decoding, bridge tag injection, nonce stamping (no Node imports). |
   | `src/headers.ts` | shared header policy: LIVE forward allowlist, response strip list, security headers, cache rule (no Node imports). |
   | `src/config.ts` | project config discovery (`sitedrift.config.json`, `.sitedriftrc.json`, package.json `"sitedrift"`). |
   | `src/index.ts` | the `sitedrift` Node export (build helpers). |
   | `src/http.ts` | `send` / `readBody` helpers. |
   | `src/browser.ts` | cross-platform `--open`. |
   | `sitedrift.mjs` | one-line shim importing `dist/sitedrift.js`, kept for tooling that runs `node_modules/sitedrift/sitedrift.mjs`. |
-  | `assets/viewer.{html,css}` | the viewer markup and styles, edited as real HTML/CSS. |
+  | `assets/viewer.{html,css}` | the viewer markup and styles, edited as real HTML/CSS. The stylesheet defines its colours once as named tokens (`light-dark()` pairs under `color-scheme: light dark`), so the viewer follows the system theme without script. |
   | `browser/viewer.ts` | the viewer script, served at `/viewer.js`. |
   | `browser/bridge.ts` | the frame bridge, loaded into framed pages as an external script. |
   | `assets/icon.svg` | served at `/icon.svg`, favicon + toolbar mark. |
@@ -134,8 +134,10 @@ the absolute upstream URL. `cleanBase()` normalizes the configured origins
 ### 3.2 `rewriteRootPaths(body, side)` — the rewrite rules
 
 Applied only to `text/html | text/css | javascript | application/json`
-responses. It prefixes root-relative references so the browser requests them
-back through the correct side's proxy prefix:
+responses. Bodies are decoded with the charset the response declares (UTF-8
+when it declares none or an unknown one), rewritten, and sent as UTF-8 with the
+content-type charset set to match. It prefixes root-relative references so the
+browser requests them back through the correct side's proxy prefix:
 
 - `href|src|action|poster="/…"` → `"/__<side>/…"`
 - `srcset="… /…, /…"` → each candidate prefixed

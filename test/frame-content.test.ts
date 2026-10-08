@@ -59,7 +59,7 @@ test('viewer pages carry config as inert JSON and no inline script', () => {
 
 test('the bridge asset reads its side from data attributes and has no HTML sinks', () => {
   assert.match(assets.bridge, /document\.currentScript/);
-  assert.match(assets.bridge, /dataset\.side/);
+  assert.match(assets.bridge, /dataset\['side'\]/);
   for (const source of [assets.bridge, assets.js]) {
     assert.doesNotMatch(source, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/);
   }

@@ -46,7 +46,7 @@ function findConfig(start: string): FoundConfig | null {
 }
 
 /** Reads sitedrift.config.json, .sitedriftrc.json, or package.json "sitedrift". Unknown keys are an error so typos surface. */
-export function readProjectConfig({ explicit, cwd = process.cwd() }: { explicit?: string; cwd?: string } = {}): Record<string, unknown> {
+export function readProjectConfig({ explicit, cwd = process.cwd() }: { explicit?: string | undefined; cwd?: string } = {}): Record<string, unknown> {
   const found: FoundConfig | null = explicit ? { file: path.resolve(cwd, explicit) } : findConfig(cwd);
   if (!found) return {};
   let value: unknown;

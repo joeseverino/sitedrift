@@ -56,20 +56,20 @@
   function readConfig(): ViewerConfig {
     const raw: unknown = JSON.parse(document.getElementById('sitedrift-config')?.textContent || '{}');
     const value = isRecord(raw) ? raw : {};
-    const origins = isRecord(value.frameOrigins) ? value.frameOrigins : {};
+    const origins = isRecord(value['frameOrigins']) ? value['frameOrigins'] : {};
     const result: ViewerConfig = {
-      dev: str(value.dev),
-      live: str(value.live),
-      brand: str(value.brand),
-      author: str(value.author),
-      vault: value.vault === true,
-      token: str(value.token),
-      api: str(value.api),
-      frameOrigins: { dev: str(origins.dev), live: str(origins.live) },
-      hosted: value.hosted === true,
-      localNotes: value.localNotes === true,
+      dev: str(value['dev']),
+      live: str(value['live']),
+      brand: str(value['brand']),
+      author: str(value['author']),
+      vault: value['vault'] === true,
+      token: str(value['token']),
+      api: str(value['api']),
+      frameOrigins: { dev: str(origins['dev']), live: str(origins['live']) },
+      hosted: value['hosted'] === true,
+      localNotes: value['localNotes'] === true,
     };
-    if (typeof value.initialPath === 'string') result.initialPath = value.initialPath;
+    if (typeof value['initialPath'] === 'string') result.initialPath = value['initialPath'];
     return result;
   }
 
@@ -147,9 +147,9 @@
     || (innerWidth <= 600 ? 'solo' : 'split');
   let viewMode: ViewMode = isViewMode(requestedView) ? requestedView : 'split';
   let overlayBlend: Blend = (params.get('overlayBlend') || storage.get('site-compare-overlay-blend')) === 'difference' ? 'difference' : 'opacity';
-  // Older links used view=diff for the overlay's difference blend.
   if (requestedView === 'diff') { viewMode = 'overlay'; overlayBlend = 'difference'; }
-  let overlayAmount = Number(params.get('overlayAmount') ?? storage.get('site-compare-overlay-amount'));
+  const requestedAmount = params.get('overlayAmount') ?? storage.get('site-compare-overlay-amount');
+  let overlayAmount = requestedAmount === null || requestedAmount.trim() === '' ? 50 : Number(requestedAmount);
   if (!Number.isFinite(overlayAmount)) overlayAmount = 50;
   let focusSide: Side = params.get('focus') === 'live' ? 'live' : 'dev';
   let reviewNotes: ViewerNote[] = [];
@@ -167,13 +167,9 @@
 
   function normalizeRoute(input: string): string {
     let value = input;
-    try {
-      if (/^https?:\/\//.test(value)) {
-        const parsed = new URL(value);
-        value = parsed.pathname + parsed.search + parsed.hash;
-      }
-    } catch {
-      // Not a parseable URL: treat the text as a route.
+    if (/^https?:\/\//.test(value) && URL.canParse(value)) {
+      const parsed = new URL(value);
+      value = parsed.pathname + parsed.search + parsed.hash;
     }
     value = value.trim() || '/';
     return value.startsWith('/') ? value : '/' + value;
@@ -355,7 +351,7 @@
     for (const badge of statusBadges(side)) {
       badge.className = 'status-badge show ' + cls;
       badge.textContent = text;
-      badge.dataset.summary = statusSummary(side);
+      badge.dataset['summary'] = statusSummary(side);
       badge.setAttribute('aria-label', `${side.toUpperCase()} returned ${text}. ${statusSummary(side)}. Click for DEV and LIVE details.`);
       badge.setAttribute('aria-haspopup', 'dialog');
       badge.setAttribute('aria-expanded', 'false');
@@ -503,7 +499,7 @@
       || config.brand
       || new URL(direct(side, route)).hostname;
     let canonicalPath = canonical;
-    try { canonicalPath = new URL(canonical).pathname; } catch { /* keep the raw value */ }
+    if (URL.canParse(canonical)) canonicalPath = new URL(canonical).pathname;
     meta[side] = { title, description, canonicalPath, heading };
     statusDetails[side] = { ...statusDetails[side], ...(source.timing || {}) };
     const pageHeading = must('.page-heading', label);
@@ -527,19 +523,19 @@
     setFavicon(seoFavicon, side, source.icon);
     const sourceText = element('div');
     const seoUrl = element('div', 'seo-url', crumb(canonical));
-    seoUrl.dataset.seo = 'url';
+    seoUrl.dataset['seo'] = 'url';
     sourceText.append(element('div', 'seo-site', siteName), seoUrl);
     const menu = element('div', 'seo-menu', '⋮');
     menu.setAttribute('aria-hidden', 'true');
     sourceRow.append(seoFavicon, sourceText, menu);
     const seoTitle = element('div', `seo-title${title ? '' : ' seo-empty'}`, truncate(title || 'Missing page title', 62));
-    seoTitle.dataset.seo = 'title';
+    seoTitle.dataset['seo'] = 'title';
     const seoDescription = element(
       'div',
       `seo-description${description ? '' : ' seo-empty'}`,
       truncate(description || 'Missing meta description', 158),
     );
-    seoDescription.dataset.seo = 'desc';
+    seoDescription.dataset['seo'] = 'desc';
     card.replaceChildren(
       element('div', 'seo-eyebrow', `${side.toUpperCase()} metadata preview`),
       sourceRow,
@@ -759,53 +755,53 @@
 
   /** Validates and normalizes what a framed page posted. Anything else it sends is ignored. */
   function parseFrameMessage(data: unknown): (FrameMessage & { side: Side }) | null {
-    if (!isRecord(data) || data.source !== 'sitedrift-frame') return null;
-    const side = data.side;
+    if (!isRecord(data) || data['source'] !== 'sitedrift-frame') return null;
+    const side = data['side'];
     if (side !== 'dev' && side !== 'live') return null;
-    switch (data.type) {
+    switch (data['type']) {
       case 'ready': {
-        const raw = isRecord(data.meta) ? data.meta : {};
-        const timing = isRecord(raw.timing) ? raw.timing : null;
-        const rawChecks: unknown[] = Array.isArray(raw.checks) ? raw.checks : [];
+        const raw = isRecord(data['meta']) ? data['meta'] : {};
+        const timing = isRecord(raw['timing']) ? raw['timing'] : null;
+        const rawChecks: unknown[] = Array.isArray(raw['checks']) ? raw['checks'] : [];
         const checks: SeoCheck[] = rawChecks.filter(isRecord).map((check) => {
-          const note = typeof check.note === 'string' ? check.note : undefined;
-          return { label: str(check.label), ok: check.ok === true, ...(note === undefined ? {} : { note }) };
+          const note = typeof check['note'] === 'string' ? check['note'] : undefined;
+          return { label: str(check['label']), ok: check['ok'] === true, ...(note === undefined ? {} : { note }) };
         });
         const parsed: PageMeta = {
-          title: str(raw.title),
-          description: str(raw.description),
-          canonical: str(raw.canonical),
-          heading: str(raw.heading),
-          siteName: str(raw.siteName),
-          icon: str(raw.icon),
+          title: str(raw['title']),
+          description: str(raw['description']),
+          canonical: str(raw['canonical']),
+          heading: str(raw['heading']),
+          siteName: str(raw['siteName']),
+          icon: str(raw['icon']),
           checks,
           timing: timing && {
-            response: num(timing.response),
-            dom: num(timing.dom),
-            load: num(timing.load),
-            transfer: num(timing.transfer),
-            decoded: num(timing.decoded),
+            response: num(timing['response']),
+            dom: num(timing['dom']),
+            load: num(timing['load']),
+            transfer: num(timing['transfer']),
+            decoded: num(timing['decoded']),
           },
         };
-        return { type: 'ready', side, route: str(data.route) || '/', meta: parsed };
+        return { type: 'ready', side, route: str(data['route']) || '/', meta: parsed };
       }
       case 'scroll':
-        return { type: 'scroll', side, y: num(data.y), max: num(data.max) };
+        return { type: 'scroll', side, y: num(data['y']), max: num(data['max']) };
       case 'wheel':
-        return { type: 'wheel', side, delta: num(data.delta), mode: num(data.mode), height: num(data.height), y: num(data.y) };
+        return { type: 'wheel', side, delta: num(data['delta']), mode: num(data['mode']), height: num(data['height']), y: num(data['y']) };
       case 'navigate':
-        return { type: 'navigate', side, route: str(data.route) };
+        return { type: 'navigate', side, route: str(data['route']) };
       case 'dismiss':
         return { type: 'dismiss', side };
       case 'key':
         return {
           type: 'key',
           side,
-          key: str(data.key),
-          shift: data.shift === true,
-          y: num(data.y),
-          height: num(data.height),
-          max: num(data.max),
+          key: str(data['key']),
+          shift: data['shift'] === true,
+          y: num(data['y']),
+          height: num(data['height']),
+          max: num(data['max']),
         };
       default:
         return null;
@@ -902,7 +898,7 @@
   }
   function renderModes(): void {
     for (const button of modeButtons) {
-      const active = button.dataset.mode === viewMode;
+      const active = button.dataset['mode'] === viewMode;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
@@ -921,7 +917,7 @@
     app.classList.toggle('solo', mode === 'solo');
     app.classList.toggle('overlay', mode === 'overlay');
     app.classList.toggle('diff', mode === 'overlay' && overlayBlend === 'difference');
-    app.dataset.focus = focusSide;
+    app.dataset['focus'] = focusSide;
     storage.set('site-compare-view', mode);
     setUrlParam('view', mode === 'split' ? null : mode);
     renderModes();
@@ -938,12 +934,12 @@
     setUrlParam('overlayBlend', overlayBlend === 'difference' ? 'difference' : null);
     renderModes();
   }
-  for (const button of modeButtons) button.addEventListener('click', () => setMode(button.dataset.mode));
+  for (const button of modeButtons) button.addEventListener('click', () => setMode(button.dataset['mode']));
   for (const identity of document.querySelectorAll<HTMLElement>('.compact-side')) {
     identity.addEventListener('click', () => {
       if (viewMode !== 'solo') return;
-      focusSide = identity.dataset.compactSide === 'dev' ? 'live' : 'dev';
-      app.dataset.focus = focusSide;
+      focusSide = identity.dataset['compactSide'] === 'dev' ? 'live' : 'dev';
+      app.dataset['focus'] = focusSide;
       renderModes();
     });
   }
@@ -979,17 +975,17 @@
     const items: unknown[] = Array.isArray(value) ? value : [];
     const notes: ViewerNote[] = [];
     for (const item of items) {
-      if (!isRecord(item) || typeof item.id !== 'string' || typeof item.text !== 'string') continue;
+      if (!isRecord(item) || typeof item['id'] !== 'string' || typeof item['text'] !== 'string') continue;
       const note: ViewerNote = {
-        id: item.id,
-        text: item.text,
-        author: str(item.author),
-        route: str(item.route),
-        side: item.side === 'dev' || item.side === 'live' ? item.side : null,
-        done: item.done === true,
+        id: item['id'],
+        text: item['text'],
+        author: str(item['author']),
+        route: str(item['route']),
+        side: item['side'] === 'dev' || item['side'] === 'live' ? item['side'] : null,
+        done: item['done'] === true,
       };
-      if (typeof item.ts === 'number') note.ts = item.ts;
-      if (typeof item.createdAt === 'string') note.createdAt = item.createdAt;
+      if (typeof item['ts'] === 'number') note.ts = item['ts'];
+      if (typeof item['createdAt'] === 'string') note.createdAt = item['createdAt'];
       notes.push(note);
     }
     return notes;
@@ -1012,7 +1008,7 @@
     try {
       const res = await fetch(config.api + '/notes', { cache: 'no-store', headers: apiHeaders });
       const data: unknown = await res.json();
-      applyNotes(isRecord(data) ? data.notes : undefined);
+      applyNotes(isRecord(data) ? data['notes'] : undefined);
     } catch {
       // The server is unreachable for now; the next poll tries again.
     }
@@ -1047,15 +1043,10 @@
         body: JSON.stringify(op),
       });
       const data: unknown = await res.json();
-      applyNotes(isRecord(data) ? data.notes : undefined);
+      applyNotes(isRecord(data) ? data['notes'] : undefined);
     } catch {
       // The note was not saved; the next poll shows the server's list.
     }
-  }
-
-  function authorClass(name: string): string {
-    const who = name.toLowerCase();
-    return who === 'joe' ? 'joe' : who === 'claude' ? 'claude' : 'other';
   }
 
   function renderNotes(): void {
@@ -1065,7 +1056,7 @@
       if (note.done) item.classList.add('done');
 
       const metaRow = element('div', 'note-meta');
-      metaRow.append(element('span', 'note-author ' + authorClass(note.author), note.author || 'note'));
+      metaRow.append(element('span', 'note-author', note.author || 'note'));
       const where = [note.side ? note.side.toUpperCase() : '', note.route && note.route !== '/' ? note.route : '']
         .filter(Boolean).join(' · ');
       if (where) metaRow.append(element('span', 'note-where', where));
@@ -1078,7 +1069,7 @@
         text.classList.add('note-go');
         text.title = 'Go to ' + route + (noteSide ? ' · ' + noteSide.toUpperCase() : '');
         text.addEventListener('click', () => {
-          if (noteSide) { focusSide = noteSide; app.dataset.focus = focusSide; renderModes(); }
+          if (noteSide) { focusSide = noteSide; app.dataset['focus'] = focusSide; renderModes(); }
           go(route);
         });
       }
@@ -1233,8 +1224,8 @@
     try {
       const res = await fetch(config.api + '/notes/save', { method: 'POST', headers: apiHeaders, body: '{}' });
       const data: unknown = await res.json();
-      const failure = isRecord(data) && typeof data.error === 'string' ? data.error : '';
-      showToast(isRecord(data) && data.ok ? 'Saved to vault' : (failure || 'Vault save failed'));
+      const failure = isRecord(data) && typeof data['error'] === 'string' ? data['error'] : '';
+      showToast(isRecord(data) && data['ok'] ? 'Saved to vault' : (failure || 'Vault save failed'));
     } catch {
       showToast('Vault save failed');
     }
@@ -1245,7 +1236,7 @@
   divider.addEventListener('pointerdown', (event) => {
     divider.setPointerCapture(event.pointerId);
     app.classList.add('dragging');
-    divider.dataset.pointerDrag = '1';
+    divider.dataset['pointerDrag'] = '1';
   });
   divider.addEventListener('pointermove', (event) => {
     if (!divider.hasPointerCapture(event.pointerId)) return;
@@ -1255,7 +1246,7 @@
     divider.releasePointerCapture(event.pointerId);
     app.classList.remove('dragging');
     divider.blur();
-    delete divider.dataset.pointerDrag;
+    delete divider.dataset['pointerDrag'];
   });
   divider.addEventListener('keydown', (event) => {
     const current = parseFloat(getComputedStyle(root).getPropertyValue('--split'));
@@ -1275,7 +1266,7 @@
         const nextSide = otherOf(focusSide);
         if (syncScroll) alignSide(focusSide, nextSide);
         focusSide = nextSide;
-        app.dataset.focus = focusSide;
+        app.dataset['focus'] = focusSide;
         setUrlParam('focus', focusSide);
         renderSettings();
       } else {
@@ -1338,7 +1329,7 @@
   renderScrollMode();
   app.classList.toggle('mobile', mobileMode);
   app.classList.toggle('compact', compactMode);
-  app.dataset.focus = focusSide;
+  app.dataset['focus'] = focusSide;
   setOverlayAmount(overlayAmount);
   renderSettings();
   setNotesOpen(notesOpen, { restoreFocus: false });

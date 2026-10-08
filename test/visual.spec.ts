@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
-const SHOULD_RUN = process.env.VISUAL === '1';
+const SHOULD_RUN = process.env['VISUAL'] === '1';
 const DESKTOP = { width: 1280, height: 800 };
 const MOBILE = { width: 412, height: 880 };
 const SCREENSHOT = {
@@ -9,14 +9,14 @@ const SCREENSHOT = {
   // Linux and macOS rasterize the same system fonts differently. Keep local
   // review strict; CI still catches layout, visibility, spacing, and color
   // regressions while allowing the measured 4-5% cross-OS text variance.
-  maxDiffPixelRatio: process.env.CI ? 0.06 : 0.01,
+  maxDiffPixelRatio: process.env['CI'] ? 0.06 : 0.01,
 };
 
 async function ready(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('.page-heading')).toHaveCount(2);
-  await expect(page.locator('.page-heading').filter({ hasText: 'Development product analytics' })).toHaveCount(1);
-  await expect(page.locator('.page-heading').filter({ hasText: 'Production product analytics' })).toHaveCount(1);
+  await expect(page.locator('.label[data-label="dev"] .page-heading')).toHaveText('Spring dinner menu | Fennel & Salt, Portland');
+  await expect(page.locator('.label[data-label="live"] .page-heading')).toHaveText('Dinner menu | Fennel & Salt, Portland');
   const origins = await page.locator('iframe').evaluateAll((frames) => frames.map((frame) => new URL(frame.getAttribute('src') ?? '').origin));
   expect(new Set(origins).size).toBe(2);
 }

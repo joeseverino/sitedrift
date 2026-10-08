@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { send } from './http.ts';
 import type { ResponseLike } from './http.ts';
 import { VIEWER_VERSION } from './viewer.ts';
-import { bridgeTag, injectBridge, rewriteRootPaths } from './frame-content.ts';
+import { bridgeTag, decodeBytes, injectBridge, rewriteRootPaths, utf8ContentType } from './frame-content.ts';
 import { DEFAULT_FORWARD_HEADERS, cleanResponseHeaders, pickHeaders, proxiedLocation } from './headers.ts';
 import type { Side } from './wire.ts';
 
@@ -89,13 +89,13 @@ export function createProxy({ devBase, liveBase }: { devBase: URL; liveBase: URL
       if (location) {
         const mapped = proxiedLocation(location, target, prefix);
         if (!mapped) {
-          delete responseHeaders.location;
+          delete responseHeaders['location'];
           responseHeaders['content-type'] = 'text/plain; charset=utf-8';
           res.writeHead(upstream.status, responseHeaders);
           res.end(method === 'HEAD' ? undefined : `sitedrift: ${side.toUpperCase()} redirected to ${new URL(location, target).href}, outside ${target.origin}. Point --${side} at the final origin.`);
           return;
         }
-        responseHeaders.location = mapped;
+        responseHeaders['location'] = mapped;
       }
 
       const type = upstream.headers.get('content-type') || '';
@@ -104,10 +104,11 @@ export function createProxy({ devBase, liveBase }: { devBase: URL; liveBase: URL
       const rewritable = /text\/html|text\/css|javascript/i.test(type)
         || (side === 'dev' && /application\/json/i.test(type));
       if (rewritable && method !== 'HEAD') {
-        let body = rewriteRootPaths(await upstream.text(), prefix, { script: /javascript/i.test(type) });
+        let body = rewriteRootPaths(decodeBytes(await upstream.arrayBuffer(), type), prefix, { script: /javascript/i.test(type) });
         if (/text\/html/i.test(type)) {
           body = injectBridge(body, bridgeTag({ src: `${BRIDGE_PATH}?v=${VIEWER_VERSION}`, side, prefix }));
         }
+        responseHeaders['content-type'] = utf8ContentType(type);
         res.writeHead(upstream.status, responseHeaders);
         res.end(body);
         return;
