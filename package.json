@@ -1,6 +1,6 @@
 {
   "name": "sitedrift",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Visual review for local and hosted previews: compare DEV and LIVE with Split, Diff, SEO, response deltas, notes, and MCP.",
   "type": "module",
   "bin": {
