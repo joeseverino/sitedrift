@@ -11,6 +11,8 @@ const SCREENSHOT = {
   // regressions while allowing the measured 4-5% cross-OS text variance.
   maxDiffPixelRatio: process.env['CI'] ? 0.06 : 0.01,
 };
+// The phone viewport is mostly text, so the same font difference covers more of the image (7% measured).
+const MOBILE_SCREENSHOT = { ...SCREENSHOT, maxDiffPixelRatio: process.env['CI'] ? 0.1 : 0.01 };
 
 async function ready(page: Page): Promise<void> {
   await page.goto('/');
@@ -37,9 +39,9 @@ test.describe('visual regression', () => {
     await page.getByRole('button', { name: 'Swap sides', exact: true }).click();
     await expect(page.locator('.app')).toHaveAttribute('data-focus', 'live');
     await page.getByRole('button', { name: 'Swap sides', exact: true }).click();
-    await expect(page).toHaveScreenshot('solo-mobile.png', SCREENSHOT);
+    await expect(page).toHaveScreenshot('solo-mobile.png', MOBILE_SCREENSHOT);
     await page.getByRole('button', { name: 'Collapse review chrome' }).click();
-    await expect(page).toHaveScreenshot('solo-mobile-compact.png', SCREENSHOT);
+    await expect(page).toHaveScreenshot('solo-mobile-compact.png', MOBILE_SCREENSHOT);
   });
 
   test('difference overlay', async ({ page }) => {

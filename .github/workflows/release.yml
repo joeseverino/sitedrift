@@ -26,6 +26,12 @@ jobs:
       - run: npm run test:e2e:visual
         env:
           SD_E2E_BUILT: '1'
+      - name: Keep the visual diffs when the suite fails
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: visual-diffs
+          path: test-results/
       - run: npm pack --dry-run
       - name: Verify tag matches package version
         run: |
